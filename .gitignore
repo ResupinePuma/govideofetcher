@@ -1,0 +1,5 @@
+configs
+videofetcher
+__debug_bin
+*.yml
+*.mp4
