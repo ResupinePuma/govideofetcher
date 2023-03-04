@@ -1,0 +1,13 @@
+version: '2'
+services:
+  govf:
+    image: vf
+    build: 
+      context: .
+      dockerfile: Dockerfile.arm
+    volumes:
+      -  ./configs:/govf/configs
+      - /etc/ssl/certs:/etc/ssl/certs
+    environment:
+      - http_proxy=http://172.30.1.5:3128
+      - https_proxy=http://172.30.1.5:3128
