@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"videofetcher/downloader"
 	"io"
 	nurl "net/url"
 	"regexp"
 	"strings"
 	"time"
+	"videofetcher/downloader"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -128,6 +128,9 @@ func (m *MsgWorker) Process(message tgbotapi.Message) {
 		case l == "" && alabel == "":
 			label = url
 		}
+
+		var re = regexp.MustCompile(`(?m).(webm|mp4|mkv|gif|flv|avi|mov|wmv|asf)`)
+		label = re.ReplaceAllString(label, "")
 
 		m.SendMsg(&MsgPayload{
 			Text:      label,
