@@ -1,9 +1,10 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
-	"videofetcher/downloader"
 	"os"
+	"videofetcher/downloader"
 
 	"gopkg.in/yaml.v2"
 )
@@ -52,7 +53,7 @@ func NewDefaultConfig() (err error) {
 			TTUrl: "https://tikmate.online/?lang=nl",
 		},
 		YTDL: downloader.YTdl{
-			Format:     "18/17,bestvideo[height<=480][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[ext=mp4]",
+			Format: "18/17,bestvideo[height<=480][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[ext=mp4]",
 		},
 	}
 	err = os.Mkdir("configs", 0644)
@@ -65,6 +66,7 @@ func NewDefaultConfig() (err error) {
 	}
 	defer f.Close()
 
+	cfg.TT.SplashRequest = base64.StdEncoding.EncodeToString([]byte(cfg.TT.SplashRequest))
 	encoder := yaml.NewEncoder(f)
 	encoder.Encode(cfg)
 	if err != nil {
@@ -85,5 +87,10 @@ func NewConfig() (cfg *Config, err error) {
 	if err != nil {
 		return
 	}
+	tc, err := base64.StdEncoding.DecodeString(cfg.TT.SplashRequest)
+	if err != nil {
+		return
+	}
+	cfg.TT.SplashRequest = string(tc)
 	return
 }

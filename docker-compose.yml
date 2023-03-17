@@ -2,7 +2,9 @@ version: '2'
 services:
   govf:
     image: vf
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     volumes:
       -  ./configs:/govf/configs
     environment:

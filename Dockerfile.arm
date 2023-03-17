@@ -10,6 +10,7 @@ RUN go build --ldflags '-linkmode external -extldflags "-static"'
 
 FROM ubuntu:20.04
 WORKDIR /govf
+COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /govf/videofetcher /govf/videofetcher
 COPY --from=builder /govf/yt-dlp /usr/local/bin/
 COPY --from=builder /govf/ffmpeg /usr/local/bin/
