@@ -1,8 +1,8 @@
 FROM golang:1.20 as builder
 WORKDIR /govf
-COPY ./code /govf
+COPY ./ /govf
 RUN apt-get update && apt-get install -y curl ca-certificates
-RUN curl -L -o /govf/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-arm
+RUN curl -L -o /govf/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-arm64
 RUN go build --ldflags '-linkmode external -extldflags "-static"'
 
 FROM ubuntu:20.04 as ytdlp-builder

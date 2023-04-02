@@ -34,26 +34,11 @@ func NewDefaultConfig() (err error) {
 		},
 		TT: downloader.TikTok{
 			SplashURL: "http://127.0.0.1:8050/execute",
-			SplashRequest: `function main(splash, args)
-			splash:on_request(function(request)
-				request.headers['user-agent'] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36"
-			end)
-			splash:go(args.url)
-			assert(splash:wait(0.5))
-			splash:runjs('document.getElementsByName("url")[0].value="%s";document.getElementsByTagName("form")[0].submit();')
-			assert(splash:wait(3)) 
-			local vurl = splash:evaljs('document.getElementsByClassName("abuttons mb-0")[0].children[0].href')
-			local title = splash:evaljs('document.getElementsByClassName("videotikmate-middle center")[0].children[1].innerText')                       
-			return {{
-				title = title,
-				vurl = vurl
-			}}
-			end
-			`,
+			SplashRequest: `ZnVuY3Rpb24gbWFpbihzcGxhc2gsIGFyZ3MpCglzcGxhc2g6b25fcmVxdWVzdChmdW5jdGlvbihyZXF1ZXN0KQoJCXJlcXVlc3Q6c2V0X2h0dHAyX2VuYWJsZWQodHJ1ZSkKCQlyZXF1ZXN0LmhlYWRlcnNbInVzZXItYWdlbnQiXSA9ICJNb3ppbGxhLzUuMCAoTGludXg7IEFuZHJvaWQgMTI7IFNNLUY5MjZCKSBBcHBsZVdlYktpdC81MzcuMzYgKEtIVE1MLCBsaWtlIEdlY2tvKSBDaHJvbWUvMTA3LjAuMC4wIFNhZmFyaS81MzcuMzYiCgllbmQpCglzcGxhc2guaW1hZ2VzX2VuYWJsZWQgPSBmYWxzZQoJc3BsYXNoOmdvKGFyZ3MudXJsKQoJc3BsYXNoOnJ1bmpzJ2RvY3VtZW50LmdldEVsZW1lbnRzQnlOYW1lKCJ1cmwiKVswXS52YWx1ZT0iJXMiO2RvY3VtZW50LmdldEVsZW1lbnRzQnlUYWdOYW1lKCJmb3JtIilbMF0uc3VibWl0KCk7JwoJd2hpbGUgbm90IHNwbGFzaDpzZWxlY3QiI2Rvd25sb2FkLWJsb2NrIiBkbyBhc3NlcnQoc3BsYXNoOndhaXQoMSkpIGVuZAoJbG9jYWwgdnVybCA9IHNwbGFzaDpldmFsanMnZG9jdW1lbnQuZ2V0RWxlbWVudHNCeUNsYXNzTmFtZSgiYWJ1dHRvbnMgbWItMCIpWzBdLmNoaWxkcmVuWzBdLmhyZWYnCglsb2NhbCB0aXRsZSA9IHNwbGFzaDpldmFsanMnZG9jdW1lbnQuZ2V0RWxlbWVudHNCeUNsYXNzTmFtZSgidmlkZW90aWttYXRlLW1pZGRsZSBjZW50ZXIiKVswXS5jaGlsZHJlblsxXS5pbm5lclRleHQnCglyZXR1cm4geyB7IHRpdGxlID0gdGl0bGUsIHZ1cmwgPSB2dXJsIH0gfQplbmQ=`,
 			TTUrl: "https://tikmate.online/?lang=nl",
 		},
 		YTDL: downloader.YTdl{
-			Format: "18/17,bestvideo[height<=480][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[ext=mp4]",
+			Format: "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
 		},
 	}
 	err = os.Mkdir("configs", 0644)
