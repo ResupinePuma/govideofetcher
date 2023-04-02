@@ -2,6 +2,7 @@ version: '2'
 services:
   govf:
     image: vf
+    container_name: videofetcher
     build: 
       context: .
       dockerfile: Dockerfile.arm
