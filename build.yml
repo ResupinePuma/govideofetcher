@@ -1,2 +1,9 @@
 govideofetcher:
   registry: 20.20.0.1:5000
+settings:
+  matching:
+    branches:
+      - main
+      - dev
+    patterns:
+      - ^v\d+\.\d+\.\d+$
