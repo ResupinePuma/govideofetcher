@@ -3,7 +3,6 @@ govideofetcher:
   notify:
     - github
 
-
 settings:
   matching:
     branches:
