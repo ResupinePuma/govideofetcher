@@ -1,12 +1,11 @@
 govideofetcher:
-  registry: 20.20.0.1:5000
-  notify:
-    - github
+  registry: registry.local:5000
+  build:
+    dockerfile: Dockerfile.arm64
 
 settings:
   matching:
     branches:
       - master
-      - dev
     patterns:
       - ^v\d+\.\d+\.\d+$
