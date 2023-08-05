@@ -7,7 +7,7 @@ govideofetcher:
 settings:
   matching:
     branches:
-      - main
+      - master
       - dev
     patterns:
       - ^v\d+\.\d+\.\d+$
