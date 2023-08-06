@@ -47,6 +47,7 @@ func TestIG_Download(t *testing.T) {
 				Timeout:   tt.fields.Timeout,
 				log:       tt.fields.log,
 				ntf:       tt.fields.ntf,
+				IGUrl:     "https://igram.world/api/ig/story?url=%s",
 			}
 			_, vid, err := tk.Download(tt.args.ctx, tt.args.url)
 			if (err != nil) != tt.wantErr {

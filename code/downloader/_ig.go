@@ -1,38 +1,29 @@
 package downloader
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"sort"
 )
 
 type IGVideo struct {
-	URL string `json:"vurl"`
-}
-
-type IgramWorld struct {
-	Result []struct {
-		VideoVersions []struct {
-			Type   int    `json:"type"`
-			Width  int    `json:"width"`
-			Height int    `json:"height"`
-			URL    string `json:"url"`
-		} `json:"video_versions"`
-	} `json:"result"`
+	URL   string `json:"vurl"`
 }
 
 type IG struct {
 	SizeLimit int `yaml:"-"`
 	Timeout   int `yaml:"-"`
 
-	IGUrl string "yaml:\"ig_url\""
-	log   AbstractLogger
-	ntf   AbstractNotifier
+	IGUrl         string "yaml:\"ig_url\""
+	SplashURL     string "yaml:\"splash_url\""
+	SplashRequest string "yaml:\"splash_request\""
+
+	log AbstractLogger
+	ntf AbstractNotifier
 }
 
 func (tt *IG) Init(logger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
@@ -59,32 +50,33 @@ func (tt *IG) httprequest(ctx context.Context, method string, url string, header
 	return
 }
 
-func (i *IG) getIGvideo(ctx context.Context, u string) (t IGVideo, err error) {
-	u = url.QueryEscape(u)
-	res, err := i.httprequest(ctx, http.MethodGet, fmt.Sprintf(i.IGUrl, u), map[string]string{
-		"User-Agent":   "Mozilla/5.0 (Linux; Android 12; SM-F926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+func (tt *IG) getIGvideo(ctx context.Context, url string) (t IGVideo, err error) {
+	reqJson := map[string]string{
+		"url":        tt.IGUrl,
+		"lua_source": fmt.Sprintf(tt.SplashRequest, url),
+	}
+	body, err := json.Marshal(reqJson)
+	if err != nil {
+		return
+	}
+	res, err := tt.httprequest(ctx, http.MethodPost, tt.SplashURL, map[string]string{
 		"Content-Type": "application/json",
-	}, nil)
+	}, bytes.NewReader(body))
 	if err != nil {
 		return
 	}
 
-	tmp := IgramWorld{}
-	err = json.NewDecoder(res.Body).Decode(&tmp)
+	tmp := map[string]IGVideo{}
+	decoder := json.NewDecoder(res.Body)
+	err = decoder.Decode(&tmp)
 	if err != nil {
 		return
 	}
-	if len(tmp.Result) == 0 {
+	if len(tmp) == 0 {
 		err = errors.New("can't find video")
 		return
 	}
-	vres := tmp.Result[0]
-	sort.Slice(vres.VideoVersions, func(i, j int) bool {
-		return vres.VideoVersions[i].Type < vres.VideoVersions[j].Type
-	})
-
-	t.URL = tmp.Result[0].VideoVersions[0].URL
-	return t, nil
+	return tmp["1"], nil
 }
 
 func (tt *IG) Download(ctx context.Context, url string) (title string, rdr io.ReadCloser, err error) {
@@ -98,7 +90,7 @@ func (tt *IG) Download(ctx context.Context, url string) (title string, rdr io.Re
 
 	tt.ntf.Message("‍⏬ downloading video")
 	res, err := tt.httprequest(ctx, http.MethodGet, ttv.URL, map[string]string{
-		"User-Agent": "Mozilla/5.0 (Linux; Android 12; SM-F926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+		"User-Agent":"Mozilla/5.0 (Linux; Android 12; SM-F926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
 	}, nil)
 	if err != nil {
 		return
