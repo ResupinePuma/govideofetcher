@@ -10,16 +10,15 @@ import (
 	"net/http"
 )
 
-type TTVideo struct {
+type IGVideo struct {
 	URL   string `json:"vurl"`
-	Title string `json:"title"`
 }
 
-type TikTok struct {
+type IG struct {
 	SizeLimit int `yaml:"-"`
 	Timeout   int `yaml:"-"`
 
-	TTUrl         string "yaml:\"tt_url\""
+	IGUrl         string "yaml:\"ig_url\""
 	SplashURL     string "yaml:\"splash_url\""
 	SplashRequest string "yaml:\"splash_request\""
 
@@ -27,7 +26,7 @@ type TikTok struct {
 	ntf AbstractNotifier
 }
 
-func (tt *TikTok) Init(logger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
+func (tt *IG) Init(logger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
 	tt.log = logger
 	tt.Timeout = opts.Timeout
 	tt.SizeLimit = opts.SizeLimit
@@ -35,8 +34,8 @@ func (tt *TikTok) Init(logger AbstractLogger, notifier AbstractNotifier, opts *O
 	return nil
 }
 
-func (tt *TikTok) httprequest(ctx context.Context, method string, url string, headers map[string]string, body io.Reader) (resp *http.Response, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+func (tt *IG) httprequest(ctx context.Context, method string, url string, headers map[string]string, body io.Reader) (resp *http.Response, err error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return
 	}
@@ -51,9 +50,9 @@ func (tt *TikTok) httprequest(ctx context.Context, method string, url string, he
 	return
 }
 
-func (tt *TikTok) getTTvideo(ctx context.Context, url string) (t TTVideo, err error) {
+func (tt *IG) getIGvideo(ctx context.Context, url string) (t IGVideo, err error) {
 	reqJson := map[string]string{
-		"url":        tt.TTUrl,
+		"url":        tt.IGUrl,
 		"lua_source": fmt.Sprintf(tt.SplashRequest, url),
 	}
 	body, err := json.Marshal(reqJson)
@@ -67,7 +66,7 @@ func (tt *TikTok) getTTvideo(ctx context.Context, url string) (t TTVideo, err er
 		return
 	}
 
-	tmp := map[string]TTVideo{}
+	tmp := map[string]IGVideo{}
 	decoder := json.NewDecoder(res.Body)
 	err = decoder.Decode(&tmp)
 	if err != nil {
@@ -80,17 +79,19 @@ func (tt *TikTok) getTTvideo(ctx context.Context, url string) (t TTVideo, err er
 	return tmp["1"], nil
 }
 
-func (tt *TikTok) Download(ctx context.Context, url string) (title string, rdr io.ReadCloser, err error) {
+func (tt *IG) Download(ctx context.Context, url string) (title string, rdr io.ReadCloser, err error) {
 	// ctx, cancel := context.WithTimeout(context.Background(), time.Duration(tt.Timeout))
 	// defer cancel()
 	tt.ntf.Message("‍🔍 searching video")
-	ttv, err := tt.getTTvideo(ctx, url)
+	ttv, err := tt.getIGvideo(ctx, url)
 	if err != nil {
 		return
 	}
 
 	tt.ntf.Message("‍⏬ downloading video")
-	res, err := tt.httprequest(ctx, http.MethodGet, ttv.URL, map[string]string{}, nil)
+	res, err := tt.httprequest(ctx, http.MethodGet, ttv.URL, map[string]string{
+		"User-Agent":"Mozilla/5.0 (Linux; Android 12; SM-F926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+	}, nil)
 	if err != nil {
 		return
 	}
@@ -100,9 +101,9 @@ func (tt *TikTok) Download(ctx context.Context, url string) (title string, rdr i
 		FileSize:  float64(res.ContentLength),
 		Notifier:  tt.ntf,
 	}
-	return ttv.Title, NewCountingReader(res.Body, &cropts), err
+	return "", NewCountingReader(res.Body, &cropts), err
 }
 
-func (tt *TikTok) Close() error {
+func (tt *IG) Close() error {
 	return nil
 }

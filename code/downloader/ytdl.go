@@ -28,7 +28,7 @@ type YTdl struct {
 	ntf            AbstractNotifier
 }
 
-func (yt *YTdl) Init(logger AbstractLogger, notifier AbstractNotifier, opts *DownloaderOpts) error {
+func (yt *YTdl) Init(logger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
 	yt.log = YTdlLog{
 		AbstractLogger: logger,
 	}

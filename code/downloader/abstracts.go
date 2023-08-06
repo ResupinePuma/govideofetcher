@@ -13,7 +13,7 @@ type AbstractLogger interface {
 }
 
 type AbstractDownloader interface {
-	Init(loggger AbstractLogger, notifier AbstractNotifier, opts *DownloaderOpts) error
+	Init(loggger AbstractLogger, notifier AbstractNotifier, opts *Opts) error
 	Download(ctx context.Context, url string) (string, io.ReadCloser, error)
 	Close() error
 }
@@ -23,7 +23,7 @@ type AbstractNotifier interface {
 	Message(text string) error
 }
 
-type DownloaderOpts struct {
+type Opts struct {
 	SizeLimit int // Max allowed size
 	Timeout   int
 }

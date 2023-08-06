@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestTikTok_Download(t *testing.T) {
+func TestIG_Download(t *testing.T) {
 	type fields struct {
 		SizeLimit int
 		Timeout   int
@@ -28,21 +28,21 @@ func TestTikTok_Download(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name: "tt",
+			name: "ig",
 			fields: fields{
 				log:       &logg{},
 				ntf:       &notitier{},
 				SizeLimit: 50 * 1024 * 1024,
 			},
 			args: args{
-				url: "https://vt.tiktok.com/ZS8axpGa3/",
+				url: "https://instagram.com/stories/4chanvideo.x/3163406295553564208?igshid=YTUzYTFiZDMwYg==",
 				ctx: context.Background(),
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tk := &TikTok{
+			tk := &IG{
 				SizeLimit: tt.fields.SizeLimit,
 				Timeout:   tt.fields.Timeout,
 				log:       tt.fields.log,

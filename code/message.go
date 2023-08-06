@@ -92,7 +92,7 @@ func (m *MsgWorker) Process(message tgbotapi.Message) {
 		notifier := MsgNotifier{Bot: m.bot, ChatID: msg.Chat.ID}
 		notifier.SendNotify(fmt.Sprintf("Got %s. 👀 at 📼", url))
 
-		opts := downloader.DownloaderOpts{
+		opts := downloader.Opts{
 			SizeLimit: cfg.Base.SizeLimit,
 			Timeout:   cfg.Base.Timeout,
 		}
@@ -101,6 +101,8 @@ func (m *MsgWorker) Process(message tgbotapi.Message) {
 		switch u := url; {
 		case strings.Contains(u, "tiktok.com") || strings.Contains(u, "tt.com"):
 			d = &cfg.TT
+		case strings.Contains(u, "instagram.com"):
+			d = &cfg.IG
 		default:
 			d = &cfg.YTDL
 		}
