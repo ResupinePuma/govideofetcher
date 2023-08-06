@@ -2,17 +2,27 @@ package downloader
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"sort"
+	"strings"
 )
 
+type IG struct {
+	SizeLimit int `yaml:"-"`
+	Timeout   int `yaml:"-"`
+
+	ReelDUrl      string "yaml:\"reel_url\""
+	StoryDUrl     string "yaml:\"story_url\""
+	SplashURL     string "yaml:\"splash_url\""
+	SplashRequest string "yaml:\"splash_request\""
+
+	log AbstractLogger
+	ntf AbstractNotifier
+}
+
 type IGVideo struct {
-	URL string `json:"vurl"`
+	URL   string `json:"vurl"`
+	Title string `json:"vtitle"`
 }
 
 type IgramWorld struct {
@@ -24,15 +34,6 @@ type IgramWorld struct {
 			URL    string `json:"url"`
 		} `json:"video_versions"`
 	} `json:"result"`
-}
-
-type IG struct {
-	SizeLimit int `yaml:"-"`
-	Timeout   int `yaml:"-"`
-
-	IGUrl string "yaml:\"ig_url\""
-	log   AbstractLogger
-	ntf   AbstractNotifier
 }
 
 func (tt *IG) Init(logger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
@@ -59,39 +60,19 @@ func (tt *IG) httprequest(ctx context.Context, method string, url string, header
 	return
 }
 
-func (i *IG) getIGvideo(ctx context.Context, u string) (t IGVideo, err error) {
-	u = url.QueryEscape(u)
-	res, err := i.httprequest(ctx, http.MethodGet, fmt.Sprintf(i.IGUrl, u), map[string]string{
-		"User-Agent":   "Mozilla/5.0 (Linux; Android 12; SM-F926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
-		"Content-Type": "application/json",
-	}, nil)
-	if err != nil {
-		return
-	}
-
-	tmp := IgramWorld{}
-	err = json.NewDecoder(res.Body).Decode(&tmp)
-	if err != nil {
-		return
-	}
-	if len(tmp.Result) == 0 {
-		err = errors.New("can't find video")
-		return
-	}
-	vres := tmp.Result[0]
-	sort.Slice(vres.VideoVersions, func(i, j int) bool {
-		return vres.VideoVersions[i].Type < vres.VideoVersions[j].Type
-	})
-
-	t.URL = tmp.Result[0].VideoVersions[0].URL
-	return t, nil
-}
-
 func (tt *IG) Download(ctx context.Context, url string) (title string, rdr io.ReadCloser, err error) {
 	// ctx, cancel := context.WithTimeout(context.Background(), time.Duration(tt.Timeout))
 	// defer cancel()
+
+	var ttv IGVideo
+
 	tt.ntf.Message("‍🔍 searching video")
-	ttv, err := tt.getIGvideo(ctx, url)
+	switch {
+	case strings.Contains(url, "/reel/"):
+		ttv, err = tt.getIGreel(ctx, url)
+	case strings.Contains(url, "/stories/"):
+		ttv, err = tt.getIGstory(ctx, url)
+	}
 	if err != nil {
 		return
 	}

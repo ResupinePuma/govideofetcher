@@ -34,11 +34,14 @@ var cfg = Config{
 	},
 	TT: downloader.TikTok{
 		SplashURL:     "http://127.0.0.1:8050/execute",
-		SplashRequest: `ZnVuY3Rpb24gbWFpbihzcGxhc2gsIGFyZ3MpCglzcGxhc2g6b25fcmVxdWVzdChmdW5jdGlvbihyZXF1ZXN0KQoJCXJlcXVlc3Q6c2V0X2h0dHAyX2VuYWJsZWQodHJ1ZSkKCQlyZXF1ZXN0LmhlYWRlcnNbInVzZXItYWdlbnQiXSA9ICJNb3ppbGxhLzUuMCAoTGludXg7IEFuZHJvaWQgMTI7IFNNLUY5MjZCKSBBcHBsZVdlYktpdC81MzcuMzYgKEtIVE1MLCBsaWtlIEdlY2tvKSBDaHJvbWUvMTA3LjAuMC4wIFNhZmFyaS81MzcuMzYiCgllbmQpCglzcGxhc2guaW1hZ2VzX2VuYWJsZWQgPSBmYWxzZQoJc3BsYXNoOmdvKGFyZ3MudXJsKQoJc3BsYXNoOnJ1bmpzJ2RvY3VtZW50LmdldEVsZW1lbnRzQnlOYW1lKCJ1cmwiKVswXS52YWx1ZT0iJXMiO2RvY3VtZW50LmdldEVsZW1lbnRzQnlUYWdOYW1lKCJmb3JtIilbMF0uc3VibWl0KCk7JwoJd2hpbGUgbm90IHNwbGFzaDpzZWxlY3QiI2Rvd25sb2FkLWJsb2NrIiBkbyBhc3NlcnQoc3BsYXNoOndhaXQoMSkpIGVuZAoJbG9jYWwgdnVybCA9IHNwbGFzaDpldmFsanMnZG9jdW1lbnQuZ2V0RWxlbWVudHNCeUNsYXNzTmFtZSgiYWJ1dHRvbnMgbWItMCIpWzBdLmNoaWxkcmVuWzBdLmhyZWYnCglsb2NhbCB0aXRsZSA9IHNwbGFzaDpldmFsanMnZG9jdW1lbnQuZ2V0RWxlbWVudHNCeUNsYXNzTmFtZSgidmlkZW90aWttYXRlLW1pZGRsZSBjZW50ZXIiKVswXS5jaGlsZHJlblsxXS5pbm5lclRleHQnCglyZXR1cm4geyB7IHRpdGxlID0gdGl0bGUsIHZ1cmwgPSB2dXJsIH0gfQplbmQ=`,
+		SplashRequest: `ZnVuY3Rpb24gbWFpbihzcGxhc2gsIGFyZ3MpCglzcGxhc2g6b25fcmVxdWVzdChmdW5jdGlvbihyZXF1ZXN0KQogICAgICAgICAgICAgICAgcmVxdWVzdDpzZXRfdGltZW91dCgxNS4wKQoJCXJlcXVlc3Q6c2V0X2h0dHAyX2VuYWJsZWQodHJ1ZSkKCQlyZXF1ZXN0LmhlYWRlcnNbInVzZXItYWdlbnQiXSA9ICJNb3ppbGxhLzUuMCAoTGludXg7IEFuZHJvaWQgMTI7IFNNLUY5MjZCKSBBcHBsZVdlYktpdC81MzcuMzYgKEtIVE1MLCBsaWtlIEdlY2tvKSBDaHJvbWUvMTA3LjAuMC4wIFNhZmFyaS81MzcuMzYiCgllbmQpCglzcGxhc2guaW1hZ2VzX2VuYWJsZWQgPSBmYWxzZQoJc3BsYXNoOmdvKGFyZ3MudXJsKQoJc3BsYXNoOnJ1bmpzJ2RvY3VtZW50LmdldEVsZW1lbnRzQnlOYW1lKCJ1cmwiKVswXS52YWx1ZT0iJXMiO2RvY3VtZW50LmdldEVsZW1lbnRzQnlUYWdOYW1lKCJmb3JtIilbMF0uc3VibWl0KCk7JwoJd2hpbGUgbm90IHNwbGFzaDpzZWxlY3QiI2Rvd25sb2FkLWJsb2NrIiBkbyBhc3NlcnQoc3BsYXNoOndhaXQoMSkpIGVuZAoJbG9jYWwgdnVybCA9IHNwbGFzaDpldmFsanMnZG9jdW1lbnQuZ2V0RWxlbWVudHNCeUNsYXNzTmFtZSgiYWJ1dHRvbnMgbWItMCIpWzBdLmNoaWxkcmVuWzBdLmhyZWYnCglsb2NhbCB0aXRsZSA9IHNwbGFzaDpldmFsanMnZG9jdW1lbnQuZ2V0RWxlbWVudHNCeUNsYXNzTmFtZSgidmlkZW90aWttYXRlLW1pZGRsZSBjZW50ZXIiKVswXS5jaGlsZHJlblsxXS5pbm5lclRleHQnCglyZXR1cm4geyB7IHRpdGxlID0gdGl0bGUsIHZ1cmwgPSB2dXJsIH0gfQplbmQ=`,
 		TTUrl:         "https://tikmate.online/?lang=nl",
 	},
 	IG: downloader.IG{
-		IGUrl: "https://igram.world/api/ig/story?url=%s",
+		SplashURL:     "http://127.0.0.1:8050/execute",
+		SplashRequest: `ZnVuY3Rpb24gbWFpbihzcGxhc2gsIGFyZ3MpCglzcGxhc2g6b25fcmVxdWVzdChmdW5jdGlvbihyZXF1ZXN0KQogICAgICAgICAgICAgICAgcmVxdWVzdDpzZXRfdGltZW91dCgxNS4wKQoJCXJlcXVlc3Q6c2V0X2h0dHAyX2VuYWJsZWQodHJ1ZSkKCQlyZXF1ZXN0LmhlYWRlcnNbInVzZXItYWdlbnQiXSA9ICJNb3ppbGxhLzUuMCAoTGludXg7IEFuZHJvaWQgMTI7IFNNLUY5MjZCKSBBcHBsZVdlYktpdC81MzcuMzYgKEtIVE1MLCBsaWtlIEdlY2tvKSBDaHJvbWUvMTA3LjAuMC4wIFNhZmFyaS81MzcuMzYiCgllbmQpCiAgc3BsYXNoLmltYWdlc19lbmFibGVkID0gZmFsc2UKCWFzc2VydChzcGxhc2g6Z28oYXJncy51cmwpKQogIGFzc2VydChzcGxhc2g6d2FpdCgwLjUpKQoJc3BsYXNoOnJ1bmpzJ2RvY3VtZW50LmdldEVsZW1lbnRzQnlOYW1lKCJxIilbMF0udmFsdWU9IiVzIjtkb2N1bWVudC5nZXRFbGVtZW50c0J5Q2xhc3NOYW1lKCJidG4gYnRuLWRlZmF1bHQiKVswXS5jbGljaygpOycKICB3aGlsZSBub3Qgc3BsYXNoOnNlbGVjdCIuZG93bmxvYWQtYm94IiBkbyBhc3NlcnQoc3BsYXNoOndhaXQoMSkpIGVuZAogIGxvY2FsIHZ1cmwgPSBzcGxhc2g6ZXZhbGpzJ0FycmF5LnByb3RvdHlwZS5zbGljZS5jYWxsKGRvY3VtZW50LmdldEVsZW1lbnRzQnlDbGFzc05hbWUoImRvd25sb2FkLWl0ZW1zX19idG4iKSkuc2xpY2UoLTEpWzBdLmdldEVsZW1lbnRzQnlUYWdOYW1lKCJhIilbMF0uaHJlZjsnCiAgcmV0dXJuIHt7IHZ1cmwgPSB2dXJsfX0KZW5k`,
+		ReelDUrl:      "https://saveinsta.app/en1",
+		StoryDUrl:     "https://igram.world/api/ig/story?url=%s",
 	},
 	YTDL: downloader.YTdl{
 		Format: "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
@@ -57,6 +60,7 @@ func NewDefaultConfig() (err error) {
 	defer f.Close()
 
 	cfg.TT.SplashRequest = base64.StdEncoding.EncodeToString([]byte(cfg.TT.SplashRequest))
+	cfg.IG.SplashRequest = base64.StdEncoding.EncodeToString([]byte(cfg.IG.SplashRequest))
 	encoder := yaml.NewEncoder(f)
 	encoder.Encode(cfg)
 	if err != nil {
@@ -82,5 +86,11 @@ func NewConfig() (cfg *Config, err error) {
 		return
 	}
 	cfg.TT.SplashRequest = string(tc)
+
+	ti, err := base64.StdEncoding.DecodeString(cfg.IG.SplashRequest)
+	if err != nil {
+		return
+	}
+	cfg.IG.SplashRequest = string(ti)
 	return
 }
