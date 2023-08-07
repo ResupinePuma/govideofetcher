@@ -17,6 +17,7 @@ RUN wget https://github.com/yt-dlp/yt-dlp/archive/refs/tags/2023.03.04.tar.gz &&
 
 FROM ubuntu:20.04
 WORKDIR /govf
+RUN apt update && apt install -y libpython3.8
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /govf/videofetcher /govf/videofetcher
 COPY --from=ytdlp-builder /root/yt-dlp /usr/local/bin/
