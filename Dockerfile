@@ -3,6 +3,7 @@ WORKDIR /govf
 COPY ./code /govf
 RUN go build --ldflags '-linkmode external -extldflags "-static"'
 
+
 FROM jauderho/yt-dlp:latest
 WORKDIR /govf
 COPY --from=builder /govf/videofetcher /govf/videofetcher
