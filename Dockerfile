@@ -1,6 +1,6 @@
 FROM golang:1.20 as builder
 WORKDIR /govf
-COPY ./code /govf
+COPY . /govf
 RUN go build --ldflags '-linkmode external -extldflags "-static"'
 
 

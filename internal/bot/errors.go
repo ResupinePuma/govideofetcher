@@ -1,4 +1,4 @@
-package main
+package bot
 
 var _ERRORS map[string]string = map[string]string{
 	"invalid url":               "Please send valid url address",

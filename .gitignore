@@ -1,6 +1,5 @@
 configs
-videofetcher
-__debug_bin
+__debug_bin*
 *.yml
 !docker-compose.*
 *.mp4

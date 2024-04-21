@@ -1,9 +1,8 @@
-package main
+package config
 
 import (
 	"errors"
 	"os"
-	"videofetcher/downloader"
 
 	"gopkg.in/yaml.v2"
 )
@@ -13,29 +12,30 @@ var ErrCfg = errors.New("error reading config.yml")
 type Config struct {
 	Base struct {
 		Token     string `yaml:"tg_token"`
-		Timeout   int    `yaml:"timeout"`
-		SizeLimit int    `yaml:"size_limit"`
+		Debug     bool   `yaml:"debug"`
+		SizeLimit int64  `yaml:"size_limit"`
+		Timeout   int64  `yaml:"timeout"`
 	} `yaml:"base"`
-	TT   downloader.TTParse `yaml:"tiktok"`
-	IG   downloader.IG      `yaml:"instagram"`
-	YTDL downloader.YTdl    `yaml:"youtube_dl"`
+	//YTDL interface{} `yaml:"youtube_dl"`
 }
 
 var cfg = Config{
 	Base: struct {
-		Token     string `yaml:"tg_token"`
-		Timeout   int    "yaml:\"timeout\""
-		SizeLimit int    "yaml:\"size_limit\""
+		Token     string "yaml:\"tg_token\""
+		Debug     bool   "yaml:\"debug\""
+		SizeLimit int64  `yaml:"size_limit"`
+		Timeout   int64  `yaml:"timeout"`
 	}{
 		Token:     "0000000000:11111111111111111111111111111111111",
+		Debug:     false,
 		Timeout:   30,
-		SizeLimit: 50 * 1024 * 1024,
+		SizeLimit: 100 << 20,
 	},
-	TT: *downloader.NewTTParse(),
-	IG: downloader.IG{},
-	YTDL: downloader.YTdl{
-		Format: "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
-	},
+	// TT: *downloader.NewTTParse(),
+	// IG: downloader.IG{},
+	// YTDL: downloader.YTdl{
+	// 	Format: "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
+	// },
 }
 
 func NewDefaultConfig() (err error) {
@@ -76,7 +76,7 @@ func NewConfig() (cfg *Config, err error) {
 	// 	return
 	// }
 	// cfg.TT.SplashRequest = string(tc)
-	cfg.TT = *downloader.NewTTParse()
+	//cfg.TT = *downloader.NewTTParse()
 
 	// ti, err := base64.StdEncoding.DecodeString(cfg.IG.SplashRequest)
 	// if err != nil {

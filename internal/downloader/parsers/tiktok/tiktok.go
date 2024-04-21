@@ -1,4 +1,4 @@
-package downloader
+package tiktok
 
 import (
 	"context"
@@ -12,6 +12,12 @@ import (
 
 	"github.com/antchfx/htmlquery"
 	"github.com/dop251/goja"
+
+	cr "videofetcher/internal/counting_reader"
+	"videofetcher/internal/downloader/dcontext"
+	"videofetcher/internal/downloader/logger"
+	v "videofetcher/internal/downloader/video"
+	"videofetcher/internal/utils"
 )
 
 var (
@@ -23,18 +29,24 @@ var (
 	er   = regexp.MustCompile(`(?m)parent.document.getElementById("alert").innerHTML = '(.*)';`)
 	aaaa = regexp.MustCompile(`(?m)\$\("#download"\)\.innerHTML = "(.*<\/div>)";`)
 
+	Logger iLogger
+
 	client = http.Client{}
 )
 
-func valError(body string) error {
-	err := er.FindString(body)
-	if err != "" {
-		return fmt.Errorf(err)
-	}
-	return nil
+func init() {
+	Logger = &logger.Logger{}
 }
 
-func parseVideo(body string) (tv TTVideo, err error) {
+// func valError(body string) error {
+// 	err := er.FindString(body)
+// 	if err != "" {
+// 		return fmt.Errorf(err)
+// 	}
+// 	return nil
+// }
+
+func parseVideo(body string) (tv v.Video, err error) {
 	body = strings.ReplaceAll(body, `\"`, `"`)
 
 	doc, err := htmlquery.Parse(strings.NewReader(body))
@@ -62,59 +74,27 @@ func parseVideo(body string) (tv TTVideo, err error) {
 	return
 }
 
-type TTVideo struct {
-	URL   string `json:"vurl"`
-	Title string `json:"title"`
+type TikTok struct {
+	SizeLimit int64 `yaml:"-"`
+
+	Client http.Client
+
+	token        string
+	lastTokenUpd time.Time
 }
 
-type TTParse struct {
-	SizeLimit int `yaml:"-"`
-
-	token string
-
-	logger AbstractLogger
-	notify AbstractNotifier
-
-	client http.Client
-	lastR  time.Time
-
-	vm *goja.Runtime
-}
-
-func NewTTParse() *TTParse {
-	return &TTParse{
-		client: http.Client{},
-		vm:     nil,
+func NewParser(sizelim int64) *TikTok {
+	return &TikTok{
+		SizeLimit: sizelim,
 	}
 }
 
-func (tt *TTParse) Init(loggger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
-	tt.logger = loggger
-	tt.notify = notifier
-	tt.SizeLimit = opts.SizeLimit
-	return nil
-}
-
-func (tt *TTParse) httprequest(ctx context.Context, method string, url string, headers map[string]string, body io.Reader) (resp *http.Response, err error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (tt *TTParse) getToken(ctx context.Context) error {
-	resp, err := tt.httprequest(ctx, http.MethodGet, REF, map[string]string{
-		"User-Agent": UA,
-	}, nil)
+func (tt *TikTok) getToken(ctx context.Context) error {
+	resp, err := utils.HTTPRequest(ctx, http.MethodGet, REF,
+		map[string]string{
+			"User-Agent": UA,
+		},
+		nil)
 	if err != nil {
 		return err
 	}
@@ -134,16 +114,16 @@ func (tt *TTParse) getToken(ctx context.Context) error {
 	}
 
 	tt.token = string(tokens[len(tokens)-1])
-	tt.lastR = time.Now()
+	tt.lastTokenUpd = time.Now()
 	return nil
 }
 
-func (tt *TTParse) getJsData(ctx context.Context, u string, headers map[string]string) (js string, err error) {
+func (tt *TikTok) getJsData(ctx context.Context, u string, headers map[string]string) (js string, err error) {
 	data := url.Values{}
 	data.Set("url", u)
 	data.Set("token", tt.token)
 
-	resp, err := tt.httprequest(ctx, http.MethodPost, "https://snaptik.app/abc2.php", headers, strings.NewReader(data.Encode()))
+	resp, err := utils.HTTPRequest(ctx, http.MethodPost, "https://snaptik.app/abc2.php", headers, strings.NewReader(data.Encode()))
 	if err != nil {
 		return
 	}
@@ -162,9 +142,9 @@ func (tt *TTParse) getJsData(ctx context.Context, u string, headers map[string]s
 	return
 }
 
-func (tt *TTParse) Download(ctx context.Context, u string) (title string, v io.ReadCloser, err error) {
-	if tt.token == "" || time.Now().Sub(tt.lastR) > time.Minute*5 {
-		err = tt.getToken(ctx)
+func (tt *TikTok) Download(ctx dcontext.Context, u string) (res []v.Video, err error) {
+	if tt.token == "" || time.Now().Sub(tt.lastTokenUpd) > time.Minute*5 {
+		err = tt.getToken(ctx.Context())
 		if err != nil {
 			return
 		}
@@ -177,13 +157,13 @@ func (tt *TTParse) Download(ctx context.Context, u string) (title string, v io.R
 		"Referer":      REF,
 	}
 
-	tt.notify.Message("‍🔍 searching video")
-	ps, err := tt.getJsData(ctx, u, headers)
+	ctx.Notifier().UpdTextNotify("‍🔍 searching video")
+	ps, err := tt.getJsData(ctx.Context(), u, headers)
 	if err != nil {
 		return
 	}
 
-	tt.notify.Message("‍🔍 getting video info")
+	ctx.Notifier().UpdTextNotify("‍🔍 getting video info")
 	vm := goja.New()
 	vm.Set("def", "")
 	_, err = vm.RunString(ps)
@@ -202,18 +182,23 @@ func (tt *TTParse) Download(ctx context.Context, u string) (title string, v io.R
 		return
 	}
 
-	tt.notify.Message("‍⏬ downloading video")
-	resp, err := tt.httprequest(ctx, http.MethodGet, tv.URL, headers, nil)
+	ctx.Notifier().UpdTextNotify("‍⏬ downloading video")
+	resp, err := utils.HTTPRequest(ctx.Context(), http.MethodGet, tv.URL, headers, nil)
 	if err != nil {
 		return
 	}
 
-	cropts := CountingReaderOpts{
+	cropts := cr.CountingReaderOpts{
 		ByteLimit: tt.SizeLimit,
 		FileSize:  float64(resp.ContentLength),
-		Notifier:  tt.notify,
+		Notifier:  ctx.Notifier(),
 	}
-	return tv.Title, NewCountingReader(resp.Body, &cropts), err
+
+	res = append(res,
+		*v.NewVideo(tv.Title, u, cr.NewCountingReader(resp.Body, &cropts)),
+	)
+
+	return res, err
 }
 
-func (tt *TTParse) Close() error { return nil }
+func (tt *TikTok) Close() error { return nil }
