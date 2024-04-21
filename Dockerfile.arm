@@ -13,7 +13,7 @@ RUN wget https://github.com/yt-dlp/yt-dlp/archive/refs/tags/2023.03.04.tar.gz &&
     python3 -m pip install -U pyinstaller -r requirements.txt && \
     python3 devscripts/make_lazy_extractors.py && \
     python3 pyinst.py && \
-    cp dist/yt-dlp_linux_aarch64 /root/yt-dlp
+    cp dist/yt-dlp_linux /root/yt-dlp
 
 FROM ubuntu:20.04
 WORKDIR /govf

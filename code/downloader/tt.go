@@ -1,42 +1,103 @@
 package downloader
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/antchfx/htmlquery"
+
+	"github.com/robertkrimen/otto"
 )
+
+var (
+	UA  = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+	REF = "https://snaptik.app/"
+
+	re   = regexp.MustCompile(`(?m)<input name="token" value="([a-zA-Z0-9=]+)" type="hidden">`)
+	jsr  = regexp.MustCompile(`(?m)<script>(.*)<\/script>`)
+	er   = regexp.MustCompile(`(?m)parent.document.getElementById("alert").innerHTML = '(.*)';`)
+	aaaa = regexp.MustCompile(`(?m)\$\("#download"\)\.innerHTML = "(.*<\/div>)";`)
+
+	client = http.Client{}
+)
+
+func valError(body string) error {
+	err := er.FindString(body)
+	if err != "" {
+		return fmt.Errorf(err)
+	}
+	return nil
+}
+
+func parseVideo(body string) (tv TTVideo, err error) {
+	body = strings.ReplaceAll(body, `\"`, `"`)
+
+	doc, err := htmlquery.Parse(strings.NewReader(body))
+	if err != nil {
+		return
+	}
+
+	t := htmlquery.FindOne(doc, `//div[@class="video-title"]`)
+	if t == nil {
+		err = fmt.Errorf("can't find title")
+		return
+	}
+	tv.Title = htmlquery.InnerText(t)
+
+	as := htmlquery.Find(doc, `//div[@class="video-links"]/a`)
+	if t == nil {
+		err = fmt.Errorf("can't find url")
+		return
+	}
+	for _, v := range as {
+		tv.URL = htmlquery.SelectAttr(v, "href")
+		break
+	}
+
+	return
+}
 
 type TTVideo struct {
 	URL   string `json:"vurl"`
 	Title string `json:"title"`
 }
 
-type TikTok struct {
+type TTParse struct {
 	SizeLimit int `yaml:"-"`
-	Timeout   int `yaml:"-"`
 
-	TTUrl         string "yaml:\"tt_url\""
-	SplashURL     string "yaml:\"splash_url\""
-	SplashRequest string "yaml:\"splash_request\""
+	token string
 
-	log AbstractLogger
-	ntf AbstractNotifier
+	logger AbstractLogger
+	notify AbstractNotifier
+
+	client http.Client
+	lastR  time.Time
+
+	vm *otto.Otto
 }
 
-func (tt *TikTok) Init(logger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
-	tt.log = logger
-	tt.Timeout = opts.Timeout
+func NewTTParse() *TTParse {
+	return &TTParse{
+		client: http.Client{},
+		vm:     otto.New(),
+	}
+}
+
+func (tt *TTParse) Init(loggger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
+	tt.logger = loggger
+	tt.notify = notifier
 	tt.SizeLimit = opts.SizeLimit
-	tt.ntf = notifier
 	return nil
 }
 
-func (tt *TikTok) httprequest(ctx context.Context, method string, url string, headers map[string]string, body io.Reader) (resp *http.Response, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+func (tt *TTParse) httprequest(ctx context.Context, method string, url string, headers map[string]string, body io.Reader) (resp *http.Response, err error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return
 	}
@@ -51,58 +112,109 @@ func (tt *TikTok) httprequest(ctx context.Context, method string, url string, he
 	return
 }
 
-func (tt *TikTok) getTTvideo(ctx context.Context, url string) (t TTVideo, err error) {
-	reqJson := map[string]string{
-		"url":        tt.TTUrl,
-		"lua_source": fmt.Sprintf(tt.SplashRequest, url),
-	}
-	body, err := json.Marshal(reqJson)
+func (tt *TTParse) getToken(ctx context.Context) error {
+	resp, err := tt.httprequest(ctx, http.MethodGet, REF, map[string]string{
+		"User-Agent": UA,
+	}, nil)
 	if err != nil {
-		return
-	}
-	res, err := tt.httprequest(ctx, http.MethodPost, tt.SplashURL, map[string]string{
-		"Content-Type": "application/json",
-	}, bytes.NewReader(body))
-	if err != nil {
-		return
+		return err
 	}
 
-	tmp := map[string]TTVideo{}
-	decoder := json.NewDecoder(res.Body)
-	err = decoder.Decode(&tmp)
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("bad status code: %v", resp.StatusCode)
+	}
+
+	page, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return
+		return err
 	}
-	if len(tmp) == 0 {
-		err = errors.New("can't find video")
-		return
+
+	tokens := re.FindSubmatch(page)
+	if tokens == nil {
+		return fmt.Errorf("token not found")
 	}
-	return tmp["1"], nil
+
+	tt.token = string(tokens[len(tokens)-1])
+	tt.lastR = time.Now()
+	return nil
 }
 
-func (tt *TikTok) Download(ctx context.Context, url string) (title string, rdr io.ReadCloser, err error) {
-	// ctx, cancel := context.WithTimeout(context.Background(), time.Duration(tt.Timeout))
-	// defer cancel()
-	tt.ntf.Message("‍🔍 searching video")
-	ttv, err := tt.getTTvideo(ctx, url)
+func (tt *TTParse) getJsData(ctx context.Context, u string, headers map[string]string) (js string, err error) {
+	data := url.Values{}
+	data.Set("url", u)
+	data.Set("token", tt.token)
+
+	resp, err := tt.httprequest(ctx, http.MethodPost, "https://snaptik.app/abc2.php", headers, strings.NewReader(data.Encode()))
 	if err != nil {
 		return
 	}
 
-	tt.ntf.Message("‍⏬ downloading video")
-	res, err := tt.httprequest(ctx, http.MethodGet, ttv.URL, map[string]string{}, nil)
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf("bad status code: %v", resp.StatusCode)
+		return
+	}
+
+	pb, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	js = strings.Replace(string(pb), "return decodeURIComponent(escape(r))", "def = decodeURIComponent(escape(r))", -1)
+	return
+}
+
+func (tt *TTParse) Download(ctx context.Context, u string) (title string, v io.ReadCloser, err error) {
+	if tt.token == "" || time.Now().Sub(tt.lastR) > time.Minute*5 {
+		err = tt.getToken(ctx)
+		if err != nil {
+			return
+		}
+	}
+
+	headers := map[string]string{
+		"User-Agent":   UA,
+		"Content-Type": "application/x-www-form-urlencoded",
+		"Origin":       REF,
+		"Referer":      REF,
+	}
+
+	tt.notify.Message("‍🔍 searching video")
+	ps, err := tt.getJsData(ctx, u, headers)
+	if err != nil {
+		return
+	}
+
+	tt.notify.Message("‍🔍 getting video info")
+	vm := tt.vm.Copy()
+	vm.Set("def", "")
+	_, err = vm.Run(ps)
+	if err != nil {
+		return
+	}
+	vi, _ := vm.Run("def")
+	ta := aaaa.FindStringSubmatch(vi.String())
+	if len(ta) < 2 {
+		err = fmt.Errorf("video not found")
+		return
+	}
+
+	tv, err := parseVideo(ta[1])
+	if err != nil {
+		return
+	}
+
+	tt.notify.Message("‍⏬ downloading video")
+	resp, err := tt.httprequest(ctx, http.MethodGet, tv.URL, headers, nil)
 	if err != nil {
 		return
 	}
 
 	cropts := CountingReaderOpts{
 		ByteLimit: tt.SizeLimit,
-		FileSize:  float64(res.ContentLength),
-		Notifier:  tt.ntf,
+		FileSize:  float64(resp.ContentLength),
+		Notifier:  tt.notify,
 	}
-	return ttv.Title, NewCountingReader(res.Body, &cropts), err
+	return tv.Title, NewCountingReader(resp.Body, &cropts), err
 }
 
-func (tt *TikTok) Close() error {
-	return nil
-}
+func (tt *TTParse) Close() error { return nil }
