@@ -2,19 +2,20 @@ package downloader
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
+
+	"github.com/antchfx/htmlquery"
 )
 
 type IG struct {
 	SizeLimit int `yaml:"-"`
 	Timeout   int `yaml:"-"`
-
-	ReelDUrl      string "yaml:\"reel_url\""
-	StoryDUrl     string "yaml:\"story_url\""
-	SplashURL     string "yaml:\"splash_url\""
-	SplashRequest string "yaml:\"splash_request\""
 
 	log AbstractLogger
 	ntf AbstractNotifier
@@ -25,15 +26,29 @@ type IGVideo struct {
 	Title string `json:"vtitle"`
 }
 
-type IgramWorld struct {
-	Result []struct {
-		VideoVersions []struct {
-			Type   int    `json:"type"`
-			Width  int    `json:"width"`
-			Height int    `json:"height"`
-			URL    string `json:"url"`
-		} `json:"video_versions"`
-	} `json:"result"`
+type IgramInfo struct {
+	Status string `json:"status"`
+	Data   string `json:"data"`
+}
+
+func parseIgVideo(body string) (tv IGVideo, err error) {
+	body = strings.ReplaceAll(body, `\"`, `"`)
+
+	doc, err := htmlquery.Parse(strings.NewReader(body))
+	if err != nil {
+		return
+	}
+
+	t := htmlquery.Find(doc, `//div[@class="download-items__btn"]/a`)
+	if t == nil {
+		err = fmt.Errorf("can't find title")
+		return
+	}
+	for _, v := range t {
+		tv.URL = htmlquery.SelectAttr(v, "href")
+		return
+	}
+	return tv, fmt.Errorf("no video")
 }
 
 func (tt *IG) Init(logger AbstractLogger, notifier AbstractNotifier, opts *Opts) error {
@@ -60,25 +75,50 @@ func (tt *IG) httprequest(ctx context.Context, method string, url string, header
 	return
 }
 
-func (tt *IG) Download(ctx context.Context, url string) (title string, rdr io.ReadCloser, err error) {
+func (i *IG) Download(ctx context.Context, u string) (title string, rdr io.ReadCloser, err error) {
 	// ctx, cancel := context.WithTimeout(context.Background(), time.Duration(tt.Timeout))
 	// defer cancel()
 
 	var ttv IGVideo
 
-	tt.ntf.Message("‍🔍 searching video")
-	switch {
-	case strings.Contains(url, "/reel/"):
-		ttv, err = tt.getIGreel(ctx, url)
-	case strings.Contains(url, "/stories/"):
-		ttv, err = tt.getIGstory(ctx, url)
+	i.ntf.Message("‍🔍 searching video")
+
+	data := url.Values{}
+	data.Set("q", u)
+	data.Set("t", "media")
+	data.Set("lang", "en")
+
+	resp, err := i.httprequest(ctx, http.MethodPost, "https://v3.saveig.app/api/ajaxSearch", map[string]string{
+		"User-Agent":   "Mozilla/5.0 (Linux; Android 12; SM-F926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+		"Content-Type": "application/x-www-form-urlencoded",
+		"Origin":       "https://saveig.app",
+		"Referer":      "https://saveig.app/",
+	}, strings.NewReader(data.Encode()))
+	if err != nil {
+		return
 	}
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf("bad status code: %v", resp.StatusCode)
+		return
+	}
+
+	tmp := IgramInfo{}
+	err = json.NewDecoder(resp.Body).Decode(&tmp)
+	if err != nil {
+		return
+	}
+	if tmp.Status != "ok" {
+		err = errors.New("can't find video")
+		return
+	}
+
+	ttv, err = parseIgVideo(tmp.Data)
 	if err != nil {
 		return
 	}
 
-	tt.ntf.Message("‍⏬ downloading video")
-	res, err := tt.httprequest(ctx, http.MethodGet, ttv.URL, map[string]string{
+	i.ntf.Message("‍⏬ downloading video")
+	res, err := i.httprequest(ctx, http.MethodGet, ttv.URL, map[string]string{
 		"User-Agent": "Mozilla/5.0 (Linux; Android 12; SM-F926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
 	}, nil)
 	if err != nil {
@@ -86,9 +126,9 @@ func (tt *IG) Download(ctx context.Context, url string) (title string, rdr io.Re
 	}
 
 	cropts := CountingReaderOpts{
-		ByteLimit: tt.SizeLimit,
+		ByteLimit: i.SizeLimit,
 		FileSize:  float64(res.ContentLength),
-		Notifier:  tt.ntf,
+		Notifier:  i.ntf,
 	}
 	return "", NewCountingReader(res.Body, &cropts), err
 }
