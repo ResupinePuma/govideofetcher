@@ -84,10 +84,10 @@ func NewConfig() (cfg *Config, err error) {
 	// cfg.TT.SplashRequest = string(tc)
 	cfg.TT = *downloader.NewTTParse()
 
-	ti, err := base64.StdEncoding.DecodeString(cfg.IG.SplashRequest)
-	if err != nil {
-		return
-	}
-	cfg.IG.SplashRequest = string(ti)
+	// ti, err := base64.StdEncoding.DecodeString(cfg.IG.SplashRequest)
+	// if err != nil {
+	// 	return
+	// }
+	// cfg.IG.SplashRequest = string(ti)
 	return
 }
