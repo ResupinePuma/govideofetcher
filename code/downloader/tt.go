@@ -11,8 +11,7 @@ import (
 	"time"
 
 	"github.com/antchfx/htmlquery"
-
-	"github.com/robertkrimen/otto"
+	"github.com/dop251/goja"
 )
 
 var (
@@ -79,13 +78,13 @@ type TTParse struct {
 	client http.Client
 	lastR  time.Time
 
-	vm *otto.Otto
+	vm *goja.Runtime
 }
 
 func NewTTParse() *TTParse {
 	return &TTParse{
 		client: http.Client{},
-		vm:     otto.New(),
+		vm:     nil,
 	}
 }
 
@@ -185,13 +184,13 @@ func (tt *TTParse) Download(ctx context.Context, u string) (title string, v io.R
 	}
 
 	tt.notify.Message("‍🔍 getting video info")
-	vm := tt.vm.Copy()
+	vm := goja.New()
 	vm.Set("def", "")
-	_, err = vm.Run(ps)
+	_, err = vm.RunString(ps)
 	if err != nil {
 		return
 	}
-	vi, _ := vm.Run("def")
+	vi := vm.Get("def")
 	ta := aaaa.FindStringSubmatch(vi.String())
 	if len(ta) < 2 {
 		err = fmt.Errorf("video not found")
