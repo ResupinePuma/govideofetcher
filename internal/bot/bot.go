@@ -18,8 +18,9 @@ var Logging iLogger
 type TelegramBot struct {
 	Options options.DownloaderOpts
 
-	bot *tgbotapi.BotAPI
-	d   downloader.Downloader
+	username string
+	bot      *tgbotapi.BotAPI
+	d        downloader.Downloader
 }
 
 type MsgPayload struct {
@@ -30,6 +31,11 @@ type MsgPayload struct {
 
 func (m *TelegramBot) Inititalize(bot *tgbotapi.BotAPI) error {
 	m.bot = bot
+	me, err := bot.GetMe()
+	if err != nil {
+		return err
+	}
+	m.username = me.UserName
 	m.d = *downloader.NewDownloader(m.Options)
 	return nil
 }
@@ -87,6 +93,10 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg []tgbotapi.Message) {
 
 func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
 	go func(msg tgbotapi.Message) {
+		if msg.IsCommand() {
+			msg.Text = msg.CommandArguments()
+		}
+
 		ctx := context.Background()
 
 		n := notifier.NewMsgNotifier(m, msg.Chat.ID)

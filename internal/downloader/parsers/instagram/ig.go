@@ -119,7 +119,7 @@ func (i *IG) Download(ctx dcontext.Context, u string) (vids []v.Video, err error
 		}
 
 		vids = append(vids,
-			*v.NewVideo(vid.Title, u, cr.NewCountingReader(resp.Body, &cropts)),
+			*v.NewVideo(u, vid.URL, cr.NewCountingReader(resp.Body, &cropts)),
 		)
 	}
 
