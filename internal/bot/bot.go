@@ -93,6 +93,9 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg []tgbotapi.Message) {
 
 func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
 	go func(msg tgbotapi.Message) {
+		if msg.From.IsBot {
+			return
+		}
 		if msg.IsCommand() {
 			msg.Text = msg.CommandArguments()
 		}
