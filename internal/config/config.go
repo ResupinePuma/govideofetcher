@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"os"
+	"syscall"
+	"videofetcher/internal/downloader/options"
 
 	"gopkg.in/yaml.v2"
 )
@@ -10,37 +12,27 @@ import (
 var ErrCfg = errors.New("error reading config.yml")
 
 type Config struct {
-	Base struct {
-		Token     string `yaml:"tg_token"`
-		Debug     bool   `yaml:"debug"`
-		SizeLimit int64  `yaml:"size_limit"`
-		Timeout   int64  `yaml:"timeout"`
-	} `yaml:"base"`
-	//YTDL interface{} `yaml:"youtube_dl"`
+	Token                  string `yaml:"tg_token"`
+	Debug                  bool   `yaml:"debug"`
+	options.DownloaderOpts `yaml:"downloader"`
 }
 
 var cfg = Config{
-	Base: struct {
-		Token     string "yaml:\"tg_token\""
-		Debug     bool   "yaml:\"debug\""
-		SizeLimit int64  `yaml:"size_limit"`
-		Timeout   int64  `yaml:"timeout"`
-	}{
-		Token:     "0000000000:11111111111111111111111111111111111",
-		Debug:     false,
+	Token: "0000000000:11111111111111111111111111111111111",
+	Debug: false,
+	DownloaderOpts: options.DownloaderOpts{
 		Timeout:   30,
 		SizeLimit: 100 << 20,
+		YTDL: options.YTDLOptions{
+			Format:     "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
+			Executable: "yt-dlp",
+		},
 	},
-	// TT: *downloader.NewTTParse(),
-	// IG: downloader.IG{},
-	// YTDL: downloader.YTdl{
-	// 	Format: "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
-	// },
 }
 
 func NewDefaultConfig() (err error) {
 	err = os.Mkdir("configs", 0644)
-	if err != nil {
+	if err != nil && !errors.Is(err, syscall.EEXIST) {
 		return
 	}
 	f, err := os.Create("configs/config.yml")

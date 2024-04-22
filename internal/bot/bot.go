@@ -3,9 +3,11 @@ package bot
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 	"videofetcher/internal/downloader"
+	"videofetcher/internal/downloader/dcontext"
+	"videofetcher/internal/downloader/options"
+	"videofetcher/internal/downloader/video"
 	"videofetcher/internal/notifier"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -14,7 +16,7 @@ import (
 var Logging iLogger
 
 type TelegramBot struct {
-	Options downloader.DownloaderOpts
+	Options options.DownloaderOpts
 
 	bot *tgbotapi.BotAPI
 	d   downloader.Downloader
@@ -23,12 +25,12 @@ type TelegramBot struct {
 type MsgPayload struct {
 	Text      string
 	SourceMsg *tgbotapi.Message
-	Video     io.Reader
+	Videos    []video.Video
 }
 
 func (m *TelegramBot) Inititalize(bot *tgbotapi.BotAPI) error {
 	m.bot = bot
-	m.d = *downloader.NewDownloader(&m.Options)
+	m.d = *downloader.NewDownloader(m.Options)
 	return nil
 }
 
@@ -45,24 +47,32 @@ func (m *TelegramBot) NewEditMessageText(chatID int64, messageID int, text strin
 func (m *TelegramBot) NewEditMessageTextAndMarkup(chatID int64, messageID int, text string, replyMarkup tgbotapi.InlineKeyboardMarkup) tgbotapi.EditMessageTextConfig {
 	return tgbotapi.NewEditMessageText(chatID, messageID, text)
 }
-func (m *TelegramBot) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+func (m *TelegramBot) Send(c tgbotapi.Chattable) ([]tgbotapi.Message, error) {
 	return m.bot.Send(c)
 }
 
-func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg tgbotapi.Message) {
+func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg []tgbotapi.Message) {
 	var msg tgbotapi.Chattable
 	switch p := payload; {
-	case p.Video != nil:
-		vidRdr := tgbotapi.FileReader{
-			Name:   payload.Text,
-			Reader: payload.Video,
+	case p.Videos != nil:
+		defer func() {
+			for _, vid := range p.Videos {
+				vid.Close()
+			}
+		}()
+
+		vids := []interface{}{}
+		for _, vid := range p.Videos {
+			media := tgbotapi.NewInputMediaVideo(&vid)
+			if len(vid.Title) <= 1024 {
+				media.Caption = vid.Title
+			}
+			vids = append(vids, media)
 		}
-		msgv := tgbotapi.NewVideo(payload.SourceMsg.Chat.ID, vidRdr)
-		msgv.Caption = payload.Text
-		msg = msgv
+		group := tgbotapi.NewMediaGroup(payload.SourceMsg.Chat.ID, vids)
+		msg = group
 	default:
 		msgt := tgbotapi.NewMessage(payload.SourceMsg.Chat.ID, payload.Text)
-		msgt.DisableWebPagePreview = true
 		msg = msgt
 	}
 
@@ -88,7 +98,9 @@ func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
 		ctx, cancel := context.WithTimeout(ctx, time.Duration(m.Options.Timeout)*time.Second)
 		defer cancel()
 
-		videos, err := m.d.Download(ctx, msg.Text)
+		dctx := dcontext.NewDownloaderContext(ctx, n)
+
+		videos, err := m.d.Download(dctx, msg.Text)
 		if err != nil {
 			Logging.Errorf("err download video %s: %v", msg.Text, err)
 			n.UpdTextNotify(GetErrMsg(err))
@@ -99,14 +111,10 @@ func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
 			n.UpdTextNotify(fmt.Sprintf("📣 I found %v videos. Start sending", len(videos)))
 		}
 
-		for _, v := range videos {
-			m.SendMsg(&MsgPayload{
-				Text:      v.Title,
-				Video:     v.Reader,
-				SourceMsg: &msg,
-			})
-			v.Close()
-		}
+		m.SendMsg(&MsgPayload{
+			Videos:    videos,
+			SourceMsg: &msg,
+		})
 
 		n.UpdTextNotify("Done! ✅")
 		time.Sleep(time.Duration(2 * time.Second))

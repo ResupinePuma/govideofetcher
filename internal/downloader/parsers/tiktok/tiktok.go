@@ -75,7 +75,7 @@ func parseVideo(body string) (tv v.Video, err error) {
 }
 
 type TikTok struct {
-	SizeLimit int64 `yaml:"-"`
+	SizeLimit int64
 
 	Client http.Client
 
@@ -144,7 +144,7 @@ func (tt *TikTok) getJsData(ctx context.Context, u string, headers map[string]st
 
 func (tt *TikTok) Download(ctx dcontext.Context, u string) (res []v.Video, err error) {
 	if tt.token == "" || time.Now().Sub(tt.lastTokenUpd) > time.Minute*5 {
-		err = tt.getToken(ctx.Context())
+		err = tt.getToken(&ctx)
 		if err != nil {
 			return
 		}
@@ -158,7 +158,7 @@ func (tt *TikTok) Download(ctx dcontext.Context, u string) (res []v.Video, err e
 	}
 
 	ctx.Notifier().UpdTextNotify("‍🔍 searching video")
-	ps, err := tt.getJsData(ctx.Context(), u, headers)
+	ps, err := tt.getJsData(&ctx, u, headers)
 	if err != nil {
 		return
 	}
@@ -183,7 +183,7 @@ func (tt *TikTok) Download(ctx dcontext.Context, u string) (res []v.Video, err e
 	}
 
 	ctx.Notifier().UpdTextNotify("‍⏬ downloading video")
-	resp, err := utils.HTTPRequest(ctx.Context(), http.MethodGet, tv.URL, headers, nil)
+	resp, err := utils.HTTPRequest(&ctx, http.MethodGet, tv.URL, headers, nil)
 	if err != nil {
 		return
 	}

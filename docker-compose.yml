@@ -4,10 +4,7 @@ services:
     image: vf
     container_name: videofetcher
     build: 
-      context: .
-      dockerfile: Dockerfile
+      context: ./
+      dockerfile: docker/Dockerfile
     volumes:
       -  ./configs:/govf/configs
-    environment:
-      - http_proxy=http://172.30.1.2:3128
-      - https_proxy=http://172.30.1.2:3128

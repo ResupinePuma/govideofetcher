@@ -4,8 +4,8 @@ services:
     image: vf
     container_name: videofetcher
     build: 
-      context: .
-      dockerfile: Dockerfile.arm
+      context: ./
+      dockerfile: docker/Dockerfile.arm
     volumes:
       -  ./configs:/govf/configs
     environment:

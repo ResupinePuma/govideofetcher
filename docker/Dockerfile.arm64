@@ -1,9 +1,9 @@
-FROM golang:1.20 as builder
+FROM golang:1.22 as builder
 WORKDIR /govf
 COPY ./code /govf
 RUN apt-get update && apt-get install -y curl ca-certificates
 RUN curl -L -o /govf/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-arm64
-RUN go build --ldflags '-linkmode external -extldflags "-static"'
+RUN go build -o build/videofetcher --ldflags '-linkmode external -extldflags "-static"' cmd/videofetcher/main.go
 
 FROM ubuntu:20.04 as ytdlp-builder
 WORKDIR /root
@@ -19,7 +19,7 @@ FROM ubuntu:20.04
 WORKDIR /govf
 RUN apt update && apt install -y libpython3.8
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
-COPY --from=builder /govf/videofetcher /govf/videofetcher
+COPY --from=builder /govf/build/videofetcher /govf/videofetcher
 COPY --from=ytdlp-builder /root/yt-dlp /usr/local/bin/
 COPY --from=builder /govf/ffmpeg /usr/local/bin/
 RUN chmod +x /usr/local/bin/*

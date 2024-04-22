@@ -1,8 +1,9 @@
 module videofetcher
 
-go 1.22.2
+go 1.22
 
 require (
+	github.com/ResupinePuma/goutubedl v0.0.0-20240126151700-4fbb1f9b0901
 	github.com/antchfx/htmlquery v1.3.1
 	github.com/dop251/goja v0.0.0-20240220182346-e401ed450204
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
@@ -20,3 +21,5 @@ require (
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 )
+
+replace github.com/go-telegram-bot-api/telegram-bot-api/v5 => ./internal/telegram-bot-api/

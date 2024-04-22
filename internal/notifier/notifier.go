@@ -18,7 +18,7 @@ type iTelegram interface {
 	NewEditMessageText(chatID int64, messageID int, text string) tgbotapi.EditMessageTextConfig
 	//NewInlineKeyboardButtonData(text, data string) tgbotapi.InlineKeyboardButton
 	NewEditMessageTextAndMarkup(chatID int64, messageID int, text string, replyMarkup tgbotapi.InlineKeyboardMarkup) tgbotapi.EditMessageTextConfig
-	Send(c tgbotapi.Chattable) (tgbotapi.Message, error)
+	Send(c tgbotapi.Chattable) ([]tgbotapi.Message, error)
 }
 
 type MsgNotifier struct {
@@ -40,7 +40,6 @@ func NewMsgNotifier(bot iTelegram, chatid int64) *MsgNotifier {
 
 func (m *MsgNotifier) UpdTextNotify(text string) (err error) {
 	msg := tgbotapi.NewEditMessageText(m.ChatID, m.MsgID, text)
-	msg.DisableWebPagePreview = true
 	_, err = m.bot.Send(msg)
 	if err != nil {
 		return err
@@ -84,13 +83,12 @@ func (m *MsgNotifier) DelProgressBar() (err error) {
 
 func (m *MsgNotifier) SendNotify(text string) (err error) {
 	msg := tgbotapi.NewMessage(m.ChatID, text)
-	msg.DisableWebPagePreview = true
 	resp, err := m.bot.Send(msg)
 	if err != nil {
 		return err
 	}
-	m.ChatID = resp.Chat.ID
-	m.MsgID = resp.MessageID
+	m.ChatID = resp[0].Chat.ID
+	m.MsgID = resp[0].MessageID
 	return
 }
 

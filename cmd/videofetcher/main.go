@@ -3,7 +3,6 @@ package main
 import (
 	"videofetcher/internal/bot"
 	"videofetcher/internal/config"
-	"videofetcher/internal/downloader"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"go.uber.org/zap"
@@ -25,12 +24,12 @@ func main() {
 
 	tgbotapi.SetLogger(Logger)
 
-	api, err := tgbotapi.NewBotAPI(cfg.Base.Token)
+	api, err := tgbotapi.NewBotAPI(cfg.Token)
 	if err != nil {
 		Logger.Panic(err)
 	}
 
-	api.Debug = cfg.Base.Debug
+	api.Debug = cfg.Debug
 
 	Logger.Infof("Authorized on account %s", api.Self.UserName)
 
@@ -40,10 +39,7 @@ func main() {
 	updates := api.GetUpdatesChan(u)
 
 	b := bot.TelegramBot{
-		Options: downloader.DownloaderOpts{
-			Timeout:   cfg.Base.Timeout,
-			SizeLimit: cfg.Base.SizeLimit,
-		},
+		Options: cfg.DownloaderOpts,
 	}
 	err = b.Inititalize(api)
 	if err != nil {

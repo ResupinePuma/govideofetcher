@@ -4,6 +4,7 @@ var _ERRORS map[string]string = map[string]string{
 	"invalid url":               "Please send valid url address",
 	"size limit reached":        "Video is too large. Try another smaller video",
 	"context deadline exceeded": "Timeout. Try again later",
+	"not found":                 "Video not found. Try another video",
 }
 
 func GetErrMsg(err error) string {
