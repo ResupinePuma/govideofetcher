@@ -54,7 +54,7 @@ func (d *Downloader) Download(ctx dcontext.Context, text string) (res []video.Vi
 	switch url.Hostname() {
 	case "tiktok.com", "vt.tiktok.com":
 		dwn = d.parsers[ParserTikTok]
-	case "instagram.com":
+	case "instagram.com", "www.instagram.com":
 		dwn = d.parsers[ParserIG]
 	default:
 		dwn = d.parsers[ParserDefault]
