@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 	"videofetcher/internal/downloader"
 	"videofetcher/internal/downloader/dcontext"
@@ -91,13 +92,40 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg []tgbotapi.Message) {
 	return
 }
 
+func usage(cmd string) string {
+	cmd = strings.TrimPrefix(cmd, "/")
+	lines := map[string]string{
+		"get": "<URL> <caption (optional)> - Downloаd video from URL",
+	}
+	if _, ok := lines[cmd]; !ok {
+		return "Command not exist"
+	}
+
+	return fmt.Sprintf("/%s %s", cmd, lines[cmd])
+}
+
 func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
 	go func(msg tgbotapi.Message) {
 		if msg.From.IsBot {
 			return
 		}
+
+		// if msg is command and empty
 		if msg.IsCommand() {
-			msg.Text = msg.CommandArguments()
+			text := msg.CommandArguments()
+			if text == "" {
+				sent := m.SendMsg(&MsgPayload{
+					Text:      usage(msg.Command()),
+					SourceMsg: &msg,
+				})
+				if len(sent) == 0 {
+					return
+				}
+				time.Sleep(10 * time.Second)
+				m.bot.Send(tgbotapi.NewDeleteMessage(msg.Chat.ID, sent[0].MessageID))
+				return
+			}
+			msg.Text = text
 		}
 
 		ctx := context.Background()
