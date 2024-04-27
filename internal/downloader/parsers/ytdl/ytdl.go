@@ -49,7 +49,7 @@ func (yt *YtDl) Download(ctx dcontext.Context, u string) (res []v.Video, err err
 		return
 	}
 
-	if result.Info.FilesizeApprox >= float64(yt.SizeLimit) {
+	if result.Info.FilesizeApprox >= float64(yt.SizeLimit) || result.Info.Format.Filesize >= float64(yt.SizeLimit) {
 		err = derrors.ErrSizeLimitReached
 		return
 	}
