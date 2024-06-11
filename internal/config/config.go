@@ -13,6 +13,7 @@ var ErrCfg = errors.New("error reading config.yml")
 
 type Config struct {
 	Token                  string `yaml:"tg_token"`
+	AdminId                int64  `yaml:"admin_id"`
 	Debug                  bool   `yaml:"debug"`
 	options.DownloaderOpts `yaml:"downloader"`
 }

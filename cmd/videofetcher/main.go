@@ -29,6 +29,7 @@ func main() {
 		Logger.Panic(err)
 	}
 
+	cfg.DownloaderOpts.AdminID = cfg.AdminId
 	api.Debug = cfg.Debug
 
 	Logger.Infof("Authorized on account %s", api.Self.UserName)

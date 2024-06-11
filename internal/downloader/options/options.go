@@ -3,6 +3,7 @@ package options
 type DownloaderOpts struct {
 	SizeLimit int64 `yaml:"size_limit"`
 	Timeout   int64 `yaml:"timeout"`
+	AdminID   int64 `yaml:"admin_id"`
 
 	YTDL YTDLOptions `yaml:"youtube_dl"`
 }
