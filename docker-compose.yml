@@ -1,8 +1,9 @@
 version: '2'
 services:
   govf:
-    image: vf
+    image: 192.168.1.2:5000/vf
     container_name: videofetcher
+    restart: always
     build: 
       context: ./
       dockerfile: docker/Dockerfile
