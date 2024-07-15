@@ -104,7 +104,11 @@ func (i *IG) Download(ctx dcontext.Context, u string) (vids []v.Video, err error
 	}
 
 	ctx.Notifier().UpdTextNotify("‍⏬ downloading video")
-	for _, vid := range ttv {
+	for num, vid := range ttv {
+		if num >= 10 {
+			break
+		}
+
 		resp, err = utils.HTTPRequest(&ctx, http.MethodGet, vid.URL, map[string]string{
 			"User-Agent": UA,
 		}, nil)
