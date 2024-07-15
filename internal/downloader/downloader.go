@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"net/url"
 	"regexp"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/options"
@@ -8,7 +9,6 @@ import (
 	"videofetcher/internal/downloader/parsers/tiktok"
 	"videofetcher/internal/downloader/parsers/ytdl"
 	"videofetcher/internal/downloader/video"
-	"videofetcher/internal/utils"
 )
 
 var (
@@ -43,15 +43,10 @@ func (d *Downloader) SetNotifier(n AbstractNotifier) {
 	d.notifier = n
 }
 
-func (d *Downloader) Download(ctx dcontext.Context, text string) (res []video.Video, err error) {
-
-	url, label, err := utils.ExtractUrlAndText(text)
-	if err != nil {
-		return
-	}
+func (d *Downloader) Download(ctx dcontext.Context, u *url.URL, label string) (res []video.Video, err error) {
 
 	var dwn AbstractDownloader
-	switch url.Hostname() {
+	switch u.Hostname() {
 	case "tiktok.com", "vt.tiktok.com":
 		dwn = d.parsers[ParserTikTok]
 	case "instagram.com", "www.instagram.com":
@@ -60,7 +55,7 @@ func (d *Downloader) Download(ctx dcontext.Context, text string) (res []video.Vi
 		dwn = d.parsers[ParserDefault]
 	}
 
-	videos, err := dwn.Download(ctx, url.String())
+	videos, err := dwn.Download(ctx, u.String())
 	if err != nil {
 		return
 	}

@@ -10,6 +10,7 @@ import (
 	"videofetcher/internal/downloader/options"
 	"videofetcher/internal/downloader/video"
 	"videofetcher/internal/notifier"
+	"videofetcher/internal/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -24,6 +25,7 @@ const (
 type TelegramBot struct {
 	Options options.DownloaderOpts
 
+	vidCache map[string]bool
 	fdbcache map[int64]time.Time
 	username string
 	bot      *tgbotapi.BotAPI
@@ -40,6 +42,7 @@ type MsgPayload struct {
 func (m *TelegramBot) Inititalize(bot *tgbotapi.BotAPI) error {
 	m.bot = bot
 	m.fdbcache = make(map[int64]time.Time)
+	m.vidCache = make(map[string]bool)
 	me, err := bot.GetMe()
 	if err != nil {
 		return err
@@ -122,6 +125,19 @@ func usage(cmd string) string {
 func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	ctx := context.Background()
 
+	url, label, err := utils.ExtractUrlAndText(msg.Text)
+	if err != nil {
+		return
+	}
+
+	if _, ok := m.vidCache[url.String()]; ok {
+		return
+	}
+
+	m.vidCache[url.String()] = true
+
+	defer delete(m.vidCache, url.String())
+
 	n := notifier.NewMsgNotifier(m, msg.Chat.ID)
 
 	m.d.SetNotifier(n)
@@ -133,7 +149,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 
 	dctx := dcontext.NewDownloaderContext(ctx, n)
 
-	videos, err := m.d.Download(dctx, msg.Text)
+	videos, err := m.d.Download(dctx, url, label)
 	if err != nil {
 		Logging.Errorf("err download video %s: %v", msg.Text, err)
 		n.UpdTextNotify(GetErrMsg(err))
