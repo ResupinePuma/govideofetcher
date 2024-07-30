@@ -1,14 +1,23 @@
 package options
 
+import "net/http"
+
 type DownloaderOpts struct {
 	SizeLimit int64 `yaml:"size_limit"`
 	Timeout   int64 `yaml:"timeout"`
 	AdminID   int64 `yaml:"admin_id"`
 
-	YTDL YTDLOptions `yaml:"youtube_dl"`
+	YTDL   YTDLOptions   `yaml:"youtube_dl"`
+	Reddit RedditOptions `yaml:"reddit_api"`
 }
 
 type YTDLOptions struct {
 	Format     string `yaml:"format"`
 	Executable string `yaml:"executable"`
+	Headers    http.Header
+}
+
+type RedditOptions struct {
+	ID     string `yaml:"id"`
+	Secret string `yaml:"secret"`
 }

@@ -6,6 +6,7 @@ import (
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/options"
 	"videofetcher/internal/downloader/parsers/instagram"
+	"videofetcher/internal/downloader/parsers/reddit"
 	"videofetcher/internal/downloader/parsers/tiktok"
 	"videofetcher/internal/downloader/parsers/ytdl"
 	"videofetcher/internal/downloader/video"
@@ -15,6 +16,7 @@ var (
 	ParserTikTok  = "tt"
 	ParserIG      = "ig"
 	ParserYTMusic = "mytdl"
+	ParserReddit  = "rddt"
 	ParserDefault = "any"
 )
 
@@ -35,6 +37,7 @@ func NewDownloader(opts options.DownloaderOpts) *Downloader {
 		ParserTikTok:  tiktok.NewParser(d.sizelimit),
 		ParserIG:      instagram.NewParser(d.sizelimit),
 		ParserDefault: ytdl.NewParser(d.sizelimit, &opts.YTDL),
+		ParserReddit:  reddit.NewParser(d.sizelimit, &opts.Reddit, &opts.YTDL),
 	}
 	return d
 }
@@ -51,6 +54,8 @@ func (d *Downloader) Download(ctx dcontext.Context, u *url.URL, label string) (r
 		dwn = d.parsers[ParserTikTok]
 	case "instagram.com", "www.instagram.com":
 		dwn = d.parsers[ParserIG]
+	case "www.reddit.com", "old.reddit.com", "reddit.com", "redd.it", "v.redd.it":
+		dwn = d.parsers[ParserReddit]
 	default:
 		dwn = d.parsers[ParserDefault]
 	}

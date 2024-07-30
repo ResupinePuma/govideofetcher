@@ -28,6 +28,10 @@ var cfg = Config{
 			Format:     "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
 			Executable: "yt-dlp",
 		},
+		Reddit: options.RedditOptions{
+			ID:     "1234",
+			Secret: "5678",
+		},
 	},
 }
 
