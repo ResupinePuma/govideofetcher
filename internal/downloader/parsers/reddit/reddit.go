@@ -2,6 +2,7 @@ package reddit
 
 import (
 	"net/http"
+	"net/url"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/options"
 	"videofetcher/internal/downloader/parsers/ytdl"
@@ -34,7 +35,7 @@ func NewParser(sizelim int64, ropts *options.RedditOptions, opts *options.YTDLOp
 	return &yt
 }
 
-func (rd *Reddit) Download(ctx dcontext.Context, url string) ([]video.Video, error) {
+func (rd *Reddit) Download(ctx dcontext.Context, u *url.URL) ([]video.Video, error) {
 	headers, err := rd.GetHeaders(&ctx)
 	if err != nil {
 		return nil, err
@@ -42,12 +43,17 @@ func (rd *Reddit) Download(ctx dcontext.Context, url string) ([]video.Video, err
 
 	rd.dwn.Headers = headers
 
-	hslurl, title, err := rd.GetHLSUrl(&ctx, url)
+	hslurl, title, err := rd.GetHLSUrl(&ctx, u.String())
 	if err != nil {
 		return nil, err
 	}
 
-	videos, err := rd.dwn.Download(ctx, hslurl)
+	hu, err := url.Parse(hslurl)
+	if err != nil {
+		return nil, err
+	}
+
+	videos, err := rd.dwn.Download(ctx, hu)
 	for i, v := range videos {
 		v.Title = title
 		videos[i] = v

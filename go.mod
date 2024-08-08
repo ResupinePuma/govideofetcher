@@ -3,7 +3,7 @@ module videofetcher
 go 1.22
 
 require (
-	github.com/ResupinePuma/goutubedl v0.0.0-20240730183539-1fb553a1f404
+	github.com/ResupinePuma/goutubedl v0.0.0-20240807203724-cc1178141501
 	github.com/antchfx/htmlquery v1.3.1
 	github.com/dop251/goja v0.0.0-20240220182346-e401ed450204
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1

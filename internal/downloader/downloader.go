@@ -10,6 +10,8 @@ import (
 	"videofetcher/internal/downloader/parsers/tiktok"
 	"videofetcher/internal/downloader/parsers/ytdl"
 	"videofetcher/internal/downloader/video"
+
+	"github.com/ResupinePuma/goutubedl"
 )
 
 var (
@@ -39,6 +41,12 @@ func NewDownloader(opts options.DownloaderOpts) *Downloader {
 		ParserDefault: ytdl.NewParser(d.sizelimit, &opts.YTDL),
 		ParserReddit:  reddit.NewParser(d.sizelimit, &opts.Reddit, &opts.YTDL),
 	}
+	var err error
+	goutubedl.Path = "yt-dlp"
+	ytdl.Extractors, err = goutubedl.ListExtractors()
+	if err != nil {
+		panic(err)
+	}
 	return d
 }
 
@@ -60,7 +68,7 @@ func (d *Downloader) Download(ctx dcontext.Context, u *url.URL, label string) (r
 		dwn = d.parsers[ParserDefault]
 	}
 
-	videos, err := dwn.Download(ctx, u.String())
+	videos, err := dwn.Download(ctx, u)
 	if err != nil {
 		return
 	}

@@ -142,7 +142,7 @@ func (tt *TikTok) getJsData(ctx context.Context, u string, headers map[string]st
 	return
 }
 
-func (tt *TikTok) Download(ctx dcontext.Context, u string) (res []v.Video, err error) {
+func (tt *TikTok) Download(ctx dcontext.Context, u *url.URL) (res []v.Video, err error) {
 	if tt.token == "" || time.Now().Sub(tt.lastTokenUpd) > time.Minute*5 {
 		err = tt.getToken(&ctx)
 		if err != nil {
@@ -158,7 +158,7 @@ func (tt *TikTok) Download(ctx dcontext.Context, u string) (res []v.Video, err e
 	}
 
 	ctx.Notifier().UpdTextNotify("‍🔍 searching video")
-	ps, err := tt.getJsData(&ctx, u, headers)
+	ps, err := tt.getJsData(&ctx, u.String(), headers)
 	if err != nil {
 		return
 	}
@@ -195,7 +195,7 @@ func (tt *TikTok) Download(ctx dcontext.Context, u string) (res []v.Video, err e
 	}
 
 	res = append(res,
-		*v.NewVideo(tv.Title, u, cr.NewCountingReader(resp.Body, &cropts)),
+		*v.NewVideo(tv.Title, u.String(), cr.NewCountingReader(resp.Body, &cropts)),
 	)
 
 	return res, err

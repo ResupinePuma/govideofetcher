@@ -2,6 +2,10 @@ github.com/ResupinePuma/goutubedl v0.0.0-20240126151700-4fbb1f9b0901 h1:b9jFFs2L
 github.com/ResupinePuma/goutubedl v0.0.0-20240126151700-4fbb1f9b0901/go.mod h1:Ut93VEHWq0UUYqZ3e6cjHZxz84cDYreRIAarV1rZ3Qg=
 github.com/ResupinePuma/goutubedl v0.0.0-20240730183539-1fb553a1f404 h1:lT8wUIyKHiHagb6lpjVLqH7oavhe9Fe/p8wXlfRtRgc=
 github.com/ResupinePuma/goutubedl v0.0.0-20240730183539-1fb553a1f404/go.mod h1:Ut93VEHWq0UUYqZ3e6cjHZxz84cDYreRIAarV1rZ3Qg=
+github.com/ResupinePuma/goutubedl v0.0.0-20240807201254-d69b63cdb5c2 h1:9FbWYkKZqbm8+WgE0T/jXpf6aunphvv7Z7T0/jQrVKk=
+github.com/ResupinePuma/goutubedl v0.0.0-20240807201254-d69b63cdb5c2/go.mod h1:Ut93VEHWq0UUYqZ3e6cjHZxz84cDYreRIAarV1rZ3Qg=
+github.com/ResupinePuma/goutubedl v0.0.0-20240807203724-cc1178141501 h1:opzpOP/gHdsGRZ13JYYG8ttCdns2s8SNkVMD+6HTQ9Y=
+github.com/ResupinePuma/goutubedl v0.0.0-20240807203724-cc1178141501/go.mod h1:Ut93VEHWq0UUYqZ3e6cjHZxz84cDYreRIAarV1rZ3Qg=
 github.com/antchfx/htmlquery v1.3.1 h1:wm0LxjLMsZhRHfQKKZscDf2COyH4vDYA3wyH+qZ+Ylc=
 github.com/antchfx/htmlquery v1.3.1/go.mod h1:PTj+f1V2zksPlwNt7uVvZPsxpKNa7mlVliCRxLX6Nx8=
 github.com/antchfx/xpath v1.3.0 h1:nTMlzGAK3IJ0bPpME2urTuFL76o4A96iYvoKFHRXJgc=

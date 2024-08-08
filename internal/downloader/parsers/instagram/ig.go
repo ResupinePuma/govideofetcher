@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	cr "videofetcher/internal/counting_reader"
@@ -63,7 +64,7 @@ func parseIgVideo(body string) (tv []v.Video, err error) {
 	return tv, nil
 }
 
-func (i *IG) Download(ctx dcontext.Context, u string) (vids []v.Video, err error) {
+func (i *IG) Download(ctx dcontext.Context, u *url.URL) (vids []v.Video, err error) {
 	ctx.Notifier().UpdTextNotify("‍🔍 searching video")
 
 	resp, err := utils.HTTPRequest(&ctx, http.MethodPost, "https://v3.saveig.app/api/ajaxSearch", map[string]string{
@@ -74,7 +75,7 @@ func (i *IG) Download(ctx dcontext.Context, u string) (vids []v.Video, err error
 	}, strings.NewReader(
 		utils.GenerateQuery(
 			map[string]string{
-				"q":    u,
+				"q":    u.String(),
 				"t":    "media",
 				"lang": "en",
 			},
@@ -123,7 +124,7 @@ func (i *IG) Download(ctx dcontext.Context, u string) (vids []v.Video, err error
 		}
 
 		vids = append(vids,
-			*v.NewVideo(u, vid.URL, cr.NewCountingReader(resp.Body, &cropts)),
+			*v.NewVideo(u.String(), vid.URL, cr.NewCountingReader(resp.Body, &cropts)),
 		)
 	}
 

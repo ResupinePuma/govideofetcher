@@ -1,11 +1,14 @@
-version: '2'
+version: '3'
 services:
   govf:
     image: 192.168.1.2:5000/vf
     container_name: videofetcher
-    restart: always
     build: 
       context: ./
       dockerfile: docker/Dockerfile
+      platforms: 
+      - linux/arm64
+      - linux/amd64   
     volumes:
       -  ./configs:/govf/configs
+    restart: always

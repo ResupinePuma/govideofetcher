@@ -2,6 +2,8 @@ package ytdl
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/derrors"
@@ -15,6 +17,8 @@ import (
 var (
 	Logger iLogger
 )
+
+var Extractors map[string][]string
 
 type YtDl struct {
 	SizeLimit int64
@@ -30,7 +34,11 @@ type YtDl struct {
 func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 	yt := YtDl{
 		SizeLimit: sizelim,
+		Headers:   http.Header{},
 	}
+
+	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	yt.Headers.Add("Accrpt-Language", "en-US,en;q=0.5")
 
 	if opts != nil {
 		yt.Format = opts.Format
@@ -42,12 +50,24 @@ func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 	return &yt
 }
 
-func (yt *YtDl) Download(ctx dcontext.Context, u string) (res []v.Video, err error) {
+func (yt *YtDl) Download(ctx dcontext.Context, u *url.URL) (res []v.Video, err error) {
+	parts := strings.Split(u.Host, ".")
+	extr := []string{"generic"}
+	for i := 1; i < len(parts)+1; i++ {
+		e := strings.Join(parts[:i], ".")
+		exx, found := Extractors[e]
+		if found {
+			extr = exx
+			break
+		}
+	}
+
 	goutubedl.Path = "yt-dlp"
-	result, err := goutubedl.New(&ctx, u, goutubedl.Options{
+	result, err := goutubedl.New(&ctx, u.String(), goutubedl.Options{
 		Type:        goutubedl.TypeSingle,
 		DebugLog:    Logger,
 		HttpHeaders: yt.Headers,
+		Extractors:  extr,
 	})
 	if err != nil {
 		return
@@ -67,7 +87,7 @@ func (yt *YtDl) Download(ctx dcontext.Context, u string) (res []v.Video, err err
 	}
 
 	res = append(res,
-		*v.NewVideo(result.Info.Title, u, cr.NewCountingReader(yt.downloadResult, &cropts)),
+		*v.NewVideo(result.Info.Title, u.String(), cr.NewCountingReader(yt.downloadResult, &cropts)),
 	)
 
 	return
