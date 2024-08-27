@@ -3,7 +3,6 @@ package ytdl
 import (
 	"net/http"
 	"net/url"
-	"strings"
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/derrors"
@@ -51,23 +50,23 @@ func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 }
 
 func (yt *YtDl) Download(ctx dcontext.Context, u *url.URL) (res []v.Video, err error) {
-	parts := strings.Split(u.Host, ".")
-	extr := []string{"generic"}
-	for i := 1; i < len(parts)+1; i++ {
-		e := strings.Join(parts[:i], ".")
-		exx, found := Extractors[e]
-		if found {
-			extr = exx
-			break
-		}
-	}
+	//parts := strings.Split(u.Host, ".")
+	// extr := []string{"generic"}
+	// for i := 1; i < len(parts)+1; i++ {
+	// 	e := strings.Join(parts[:i], ".")
+	// 	exx, found := Extractors[e]
+	// 	if found {
+	// 		extr = exx
+	// 		break
+	// 	}
+	// }
 
 	goutubedl.Path = "yt-dlp"
 	result, err := goutubedl.New(&ctx, u.String(), goutubedl.Options{
 		Type:        goutubedl.TypeSingle,
 		DebugLog:    Logger,
 		HttpHeaders: yt.Headers,
-		Extractors:  extr,
+		//Extractors:  extr,
 	})
 	if err != nil {
 		return
