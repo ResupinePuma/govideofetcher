@@ -78,6 +78,7 @@ func (i *IG) Download(ctx dcontext.Context, u *url.URL) (vids []v.Video, err err
 				"q":    u.String(),
 				"t":    "media",
 				"lang": "en",
+				"v":    "v2",
 			},
 		)))
 	if err != nil {
