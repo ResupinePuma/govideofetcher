@@ -14,6 +14,8 @@ import (
 	v "videofetcher/internal/downloader/video"
 	"videofetcher/internal/utils"
 
+	"github.com/dop251/goja"
+
 	"github.com/antchfx/htmlquery"
 )
 
@@ -42,7 +44,17 @@ func NewParser(sizelim int64) *IG {
 func parseIgVideo(body string) (tv []v.Video, err error) {
 	body = strings.ReplaceAll(body, `\"`, `"`)
 
-	doc, err := htmlquery.Parse(strings.NewReader(body))
+	ps := strings.Replace(body, "return decodeURIComponent(r)", `def = decodeURIComponent(r).replace(/\n/g, '').replace(/\\"/g, '"');`, -1)
+
+	vm := goja.New()
+	vm.Set("def", "")
+	_, err = vm.RunString(ps)
+	if err != nil {
+		return
+	}
+	vi := vm.Get("def")
+
+	doc, err := htmlquery.Parse(strings.NewReader(vi.String()))
 	if err != nil {
 		return
 	}
