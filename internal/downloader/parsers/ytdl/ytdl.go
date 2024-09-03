@@ -79,6 +79,9 @@ func (yt *YtDl) Download(ctx dcontext.Context, u *url.URL) (res []v.Video, err e
 
 	ctx.Notifier().UpdTextNotify("‍⏬ downloading video")
 	yt.downloadResult, err = result.Download(&ctx, yt.Format)
+	if err != nil {
+		return
+	}
 	cropts := cr.CountingReaderOpts{
 		ByteLimit: yt.SizeLimit,
 		FileSize:  float64(yt.downloadResult.Size()),

@@ -8,6 +8,9 @@ import (
 	"videofetcher/internal/downloader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/options"
+	"videofetcher/internal/downloader/parsers/instagram"
+	"videofetcher/internal/downloader/parsers/tiktok"
+	"videofetcher/internal/downloader/parsers/ytdl"
 	"videofetcher/internal/downloader/video"
 	"videofetcher/internal/notifier"
 	"videofetcher/internal/utils"
@@ -40,6 +43,10 @@ type MsgPayload struct {
 }
 
 func (m *TelegramBot) Inititalize(bot *tgbotapi.BotAPI) error {
+	ytdl.Logger = Logging
+	tiktok.Logger = Logging
+	instagram.Logger = Logging
+
 	m.bot = bot
 	m.fdbcache = make(map[int64]time.Time)
 	m.vidCache = make(map[string]bool)

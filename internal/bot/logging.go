@@ -17,3 +17,7 @@ func (l *Logger) Println(v ...interface{}) {
 func (l *Logger) Printf(format string, v ...interface{}) {
 	l.SugaredLogger.Infof(format, v...)
 }
+
+func (l *Logger) Print(v ...interface{}) {
+	l.SugaredLogger.Info(v...)
+}
