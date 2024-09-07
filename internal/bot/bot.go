@@ -94,6 +94,7 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg []tgbotapi.Message) {
 				if len(vid.Title) <= 1024 {
 					media.Caption = vid.Title
 				}
+				media.SupportsStreaming = true
 				vids = append(vids, media)
 			}
 			group := tgbotapi.NewMediaGroup(payload.SourceMsg.Chat.ID, vids)
