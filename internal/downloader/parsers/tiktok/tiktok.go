@@ -15,6 +15,7 @@ import (
 
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
+	"videofetcher/internal/downloader/dresult"
 	"videofetcher/internal/downloader/logger"
 	v "videofetcher/internal/downloader/video"
 	"videofetcher/internal/utils"
@@ -182,16 +183,19 @@ func (tt *TikTok) Download(ctx dcontext.Context, u *url.URL) (res []v.Video, err
 		return
 	}
 
+	dr := dresult.NewDownloaderResult(&ctx)
+
 	ctx.Notifier().UpdTextNotify("‍⏬ downloading video")
+	go ctx.Notifier().StartTicker(&ctx)
 	resp, err := utils.HTTPRequest(&ctx, http.MethodGet, tv.URL, headers, nil)
 	if err != nil {
 		return
 	}
+	dr.ReadCloser = resp.Body
 
 	cropts := cr.CountingReaderOpts{
 		ByteLimit: tt.SizeLimit,
 		FileSize:  float64(resp.ContentLength),
-		Notifier:  ctx.Notifier(),
 	}
 
 	res = append(res,

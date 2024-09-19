@@ -11,6 +11,7 @@ import (
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/derrors"
+	"videofetcher/internal/downloader/dresult"
 	v "videofetcher/internal/downloader/video"
 	"videofetcher/internal/utils"
 
@@ -117,7 +118,10 @@ func (i *IG) Download(ctx dcontext.Context, u *url.URL) (vids []v.Video, err err
 		return
 	}
 
+	dr := dresult.NewDownloaderResult(&ctx)
+
 	ctx.Notifier().UpdTextNotify("‍⏬ downloading video")
+	go ctx.Notifier().StartTicker(dr.Context())
 	for num, vid := range ttv {
 		if num >= 10 {
 			break
@@ -133,7 +137,6 @@ func (i *IG) Download(ctx dcontext.Context, u *url.URL) (vids []v.Video, err err
 		cropts := cr.CountingReaderOpts{
 			ByteLimit: i.SizeLimit,
 			FileSize:  float64(resp.ContentLength),
-			Notifier:  ctx.Notifier(),
 		}
 
 		vids = append(vids,

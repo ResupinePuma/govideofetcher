@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"net/url"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/video"
@@ -14,7 +15,7 @@ type AbstractDownloader interface {
 type AbstractNotifier interface {
 	SendNotify(text string) (err error)
 	UpdTextNotify(text string) (err error)
-	MakeProgressBar(percent float64) (err error)
+	StartTicker(ctx context.Context) (err error)
 }
 
 type iLogger interface {

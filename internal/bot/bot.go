@@ -106,6 +106,9 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg []tgbotapi.Message) {
 	case TypeFeedback:
 		msgt := tgbotapi.NewMessage(payload.SourceMsg.Chat.ID, payload.Text)
 		msg = msgt
+	default:
+		msgt := tgbotapi.NewMessage(payload.SourceMsg.Chat.ID, payload.Text)
+		msg = msgt
 	}
 
 	rmsg, err := m.Send(msg)
@@ -175,6 +178,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	})
 
 	n.UpdTextNotify("Done! ✅")
+	cancel()
 	time.Sleep(time.Duration(2 * time.Second))
 
 	n.Close()

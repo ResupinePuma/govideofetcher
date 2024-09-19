@@ -1,18 +1,20 @@
 package counting_reader
 
 import (
+	"context"
 	"errors"
 	"io"
 )
 
+const blockSize = 500 * 1024
+
 type iNotify interface {
-	MakeProgressBar(percent float64) (err error)
+	StartTicker(ctx context.Context) (err error)
 }
 
 type CountingReaderOpts struct {
 	ByteLimit int64
 	FileSize  float64
-	Notifier  iNotify
 }
 
 type CountingReader struct {
@@ -21,31 +23,29 @@ type CountingReader struct {
 	opts CountingReaderOpts
 
 	bytesReaded int
-	useNotifier bool
+	blocknum    int
 }
 
 func NewCountingReader(reader io.ReadCloser, opts *CountingReaderOpts) *CountingReader {
 	cr := CountingReader{
 		ReadCloser: reader,
 	}
-	if opts.Notifier != nil {
-		cr.useNotifier = true
-		cr.opts = *opts
-	}
+	cr.opts = *opts
 	return &cr
 }
 
 func (r *CountingReader) Read(p []byte) (n int, err error) {
 	n, err = r.ReadCloser.Read(p)
+	if err != nil {
+		return
+	}
 	r.bytesReaded += n
 
 	if int64(r.bytesReaded) >= r.opts.ByteLimit {
 		err = errors.New("size limit reached")
 		return
 	}
-	if r.useNotifier {
-		r.opts.Notifier.MakeProgressBar(float64(r.bytesReaded) / r.opts.FileSize * 100)
-	}
+
 	return n, err
 }
 

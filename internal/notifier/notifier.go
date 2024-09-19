@@ -1,15 +1,17 @@
 package notifier
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 const (
 	GREENTILE = "🟩"
-	EMPTYTILE = "      "
+	EMPTYTILE = "⬛"
 )
 
 type iTelegram interface {
@@ -28,12 +30,14 @@ type MsgNotifier struct {
 
 	oldMsg string
 
-	bot iTelegram
+	bot  iTelegram
+	pbar bool
 }
 
 func NewMsgNotifier(bot iTelegram, chatid int64) *MsgNotifier {
 	return &MsgNotifier{
 		bot:    bot,
+		pbar:   true,
 		ChatID: chatid,
 	}
 }
@@ -48,28 +52,34 @@ func (m *MsgNotifier) UpdTextNotify(text string) (err error) {
 	return
 }
 
-func (m *MsgNotifier) MakeProgressBar(percent float64) (err error) {
-	percent = percent / 10
+func (m *MsgNotifier) StartTicker(ctx context.Context) (err error) {
+	ticker := time.NewTicker(time.Second)
+	offset := 0
+	for {
+		select {
+		case <-ctx.Done():
+			ticker.Stop()
+			return
+		case <-ticker.C:
+			pbar := []string{EMPTYTILE, EMPTYTILE, EMPTYTILE, EMPTYTILE, EMPTYTILE, EMPTYTILE, EMPTYTILE, EMPTYTILE, EMPTYTILE, EMPTYTILE}
+			pbar[offset] = GREENTILE
+			offset++
+			if offset >= 10 {
+				offset = 0
+			}
 
-	if percent > 100 {
-		percent = 100
-	} else if percent < 0 {
-		percent = 0
+			newMsg := fmt.Sprintf("%s\n|%s|", m.ProgressMsg, strings.Join(pbar, ""))
+			if newMsg == m.oldMsg {
+				return
+			}
+			msg := tgbotapi.NewEditMessageText(m.ChatID, m.MsgID, newMsg)
+			_, err = m.bot.Send(msg)
+			if err != nil {
+				return err
+			}
+			m.oldMsg = newMsg
+		}
 	}
-
-	greens := strings.Repeat(GREENTILE, int(percent))
-	emptys := strings.Repeat(EMPTYTILE, 10-int(percent))
-	newMsg := fmt.Sprintf("%s\n|%s%s| %d", m.ProgressMsg, greens, emptys, int(percent)*10) + "%"
-	if newMsg == m.oldMsg {
-		return
-	}
-	msg := tgbotapi.NewEditMessageText(m.ChatID, m.MsgID, newMsg)
-	_, err = m.bot.Send(msg)
-	if err != nil {
-		return err
-	}
-	m.oldMsg = newMsg
-	return
 }
 
 func (m *MsgNotifier) DelProgressBar() (err error) {

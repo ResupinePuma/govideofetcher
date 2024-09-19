@@ -1,6 +1,8 @@
 package video
 
-import "io"
+import (
+	"io"
+)
 
 type Video struct {
 	Title  string

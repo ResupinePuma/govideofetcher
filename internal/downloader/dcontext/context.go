@@ -7,7 +7,7 @@ import (
 
 type iNotifier interface {
 	UpdTextNotify(text string) (err error)
-	MakeProgressBar(percent float64) (err error)
+	StartTicker(ctx context.Context) (err error)
 }
 
 type Context struct {
@@ -17,8 +17,8 @@ type Context struct {
 
 func NewDownloaderContext(ctx context.Context, notifier iNotifier) Context {
 	return Context{
-		ctx:   ctx,
-		n:     notifier,
+		ctx: ctx,
+		n:   notifier,
 	}
 }
 
