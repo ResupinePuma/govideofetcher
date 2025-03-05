@@ -3,10 +3,10 @@ package downloader
 import (
 	"net/url"
 	"regexp"
+	"sync"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/options"
 	"videofetcher/internal/downloader/parsers/instagram"
-	"videofetcher/internal/downloader/parsers/reddit"
 	"videofetcher/internal/downloader/parsers/tiktok"
 	"videofetcher/internal/downloader/parsers/ytdl"
 	"videofetcher/internal/downloader/video"
@@ -16,7 +16,7 @@ var (
 	ParserTikTok  = "tt"
 	ParserIG      = "ig"
 	ParserYTMusic = "mytdl"
-	ParserReddit  = "rddt"
+	//ParserReddit  = "rddt"
 	ParserDefault = "any"
 )
 
@@ -37,14 +37,8 @@ func NewDownloader(opts options.DownloaderOpts) *Downloader {
 		ParserTikTok:  tiktok.NewParser(d.sizelimit),
 		ParserIG:      instagram.NewParser(d.sizelimit),
 		ParserDefault: ytdl.NewParser(d.sizelimit, &opts.YTDL),
-		ParserReddit:  reddit.NewParser(d.sizelimit, &opts.Reddit, &opts.YTDL),
+		//ParserReddit:  reddit.NewParser(d.sizelimit, &opts.Reddit, &opts.YTDL),
 	}
-	//var err error
-	//goutubedl.Path = "yt-dlp"
-	// ytdl.Extractors, err = goutubedl.ListExtractors()
-	// if err != nil {
-	// 	panic(err)
-	// }
 	return d
 }
 
@@ -52,7 +46,7 @@ func (d *Downloader) SetNotifier(n AbstractNotifier) {
 	d.notifier = n
 }
 
-func (d *Downloader) Download(ctx dcontext.Context, u *url.URL, label string) (res []video.Video, err error) {
+func (d *Downloader) Download(ctx *dcontext.Context, u *url.URL, label string) (res []video.Video, err error) {
 
 	var dwn AbstractDownloader
 	switch u.Hostname() {
@@ -60,26 +54,34 @@ func (d *Downloader) Download(ctx dcontext.Context, u *url.URL, label string) (r
 		dwn = d.parsers[ParserTikTok]
 	case "instagram.com", "www.instagram.com":
 		dwn = d.parsers[ParserIG]
-	case "www.reddit.com", "old.reddit.com", "reddit.com", "redd.it", "v.redd.it":
-		dwn = d.parsers[ParserReddit]
+	// case "www.reddit.com", "old.reddit.com", "reddit.com", "redd.it", "v.redd.it":
+	// 	dwn = d.parsers[ParserReddit]
 	default:
 		dwn = d.parsers[ParserDefault]
-	}
+	} 
 
-	videos, err := dwn.Download(ctx, u)
-	if err != nil {
-		return
-	}
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = dwn.Download(ctx)
+		if err != nil {
+			return
+		}
+	}()
 
 	var re = regexp.MustCompile(`(?m).(webm|mp4|mkv|gif|flv|avi|mov|wmv|asf)`)
-	for i, v := range videos {
-		if label != "" {
-			v.Title = label
-		}
+	for rr := range ctx.Results() {
+		for _, v := range rr {
+			if label != "" {
+				v.Title = label
+			}
 
-		v.Title = re.ReplaceAllString(v.Title, "")
-		videos[i] = v
+			v.Title = re.ReplaceAllString(v.Title, "")
+			res = append(res, v)
+		}
 	}
 
-	return videos, nil
+	return res, nil
 }

@@ -2,13 +2,11 @@ package downloader
 
 import (
 	"context"
-	"net/url"
 	"videofetcher/internal/downloader/dcontext"
-	"videofetcher/internal/downloader/video"
 )
 
 type AbstractDownloader interface {
-	Download(ctx dcontext.Context, u *url.URL) ([]video.Video, error)
+	Download(ctx *dcontext.Context) error
 	Close() error
 }
 

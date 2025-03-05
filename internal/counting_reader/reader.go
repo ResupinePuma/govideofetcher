@@ -1,16 +1,11 @@
 package counting_reader
 
 import (
-	"context"
 	"errors"
 	"io"
 )
 
 const blockSize = 500 * 1024
-
-type iNotify interface {
-	StartTicker(ctx context.Context) (err error)
-}
 
 type CountingReaderOpts struct {
 	ByteLimit int64

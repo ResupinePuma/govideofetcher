@@ -1,6 +1,6 @@
 package bot
 
-type iLogger interface {
+type Logger interface {
 	Print(v ...any)
 	Errorf(format string, v ...any)
 	Warnf(format string, v ...any)

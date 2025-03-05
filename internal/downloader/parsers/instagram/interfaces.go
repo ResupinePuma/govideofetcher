@@ -5,7 +5,7 @@ type INotify interface {
 	MakeProgressBar(percent float64) (err error)
 }
 
-type iLogger interface {
+type Logger interface {
 	Errorf(format string, v ...any)
 	Warnf(format string, v ...any)
 	Infof(format string, v ...any)

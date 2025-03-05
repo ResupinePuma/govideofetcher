@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
 	"videofetcher/internal/downloader/dcontext"
-	"videofetcher/internal/downloader/dresult"
 )
 
 type logg struct{}
@@ -25,12 +25,11 @@ func (l *notitier) UpdTextNotify(text string) (err error)       { log.Println(te
 func (l *notitier) StartTicker(ctx context.Context) (err error) { return }
 
 func TestYTdl_Download(t *testing.T) {
-	Logger = &logg{}
+	Logging = &logg{}
 
 	type fields struct {
-		downloadResult *dresult.DownloadResult
-		SizeLimit      float64
-		Timeout        int
+		SizeLimit float64
+		Timeout   int
 	}
 	type args struct {
 		ctx context.Context
@@ -68,8 +67,6 @@ func TestYTdl_Download(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			yt := &YtDl{
-				//downloadResult: tt.fields.downloadResult,
-				//SizeLimit:      int(tt.fields.SizeLimit),
 				SizeLimit: 50 * 1024 * 1024,
 				Timeout:   tt.fields.Timeout,
 				Format:    "18/17/bestvideo+worstaudio/(mp4)[ext=mp4][vcodec^=h26]/worst[width>=480][ext=mp4]/worst[ext=mp4]",
@@ -78,18 +75,32 @@ func TestYTdl_Download(t *testing.T) {
 			//var vid io.Reader
 			u, _ := url.Parse(tt.args.u)
 			ccc := dcontext.NewDownloaderContext(context.Background(), &notitier{})
-			vid, err := yt.Download(ccc, u)
+			ccc.SetUrl(u)
+
+			var wg sync.WaitGroup
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				vid := <-ccc.Results()
+
+				if vid == nil {
+					t.Error("YTdl.Download() error = empty file")
+				}
+				res, _ := os.Create("res.mp4")
+				for _, v := range vid {
+					io.Copy(res, v.Reader)
+				}
+
+			}()
+
+			err = yt.Download(ccc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("YTdl.Download() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if vid == nil {
-				t.Error("YTdl.Download() error = empty file")
-			}
-			res, _ := os.Create("res.mp4")
-			for _, v := range vid {
-				io.Copy(res, v.Reader)
-			}
+
+			wg.Wait()
 
 		})
 	}

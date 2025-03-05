@@ -18,8 +18,8 @@ RUN go build -o build/videofetcher --ldflags '-linkmode external -extldflags "-s
 FROM python:3-alpine3.20 as ytdlp-builder
 WORKDIR /root
 RUN apk update && apk upgrade -a && apk add wget binutils g++
-RUN wget https://github.com/yt-dlp/yt-dlp/archive/refs/tags/2024.08.06.tar.gz && tar -xzvf 2024.08.06.tar.gz && \
-    cd yt-dlp-2024.08.06 && \
+RUN wget https://github.com/yt-dlp/yt-dlp/archive/refs/tags/2024.10.07.tar.gz && tar -xzvf 2024.10.07.tar.gz && \
+    cd yt-dlp-2024.10.07 && \
     python3 devscripts/install_deps.py --include pyinstaller && \
     python3 devscripts/make_lazy_extractors.py && \
     python3 -m bundle.pyinstaller && \

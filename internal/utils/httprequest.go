@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func HTTPRequest(ctx context.Context, method string, url string, headers map[string]string, body io.Reader) (resp *http.Response, err error) {
+func HTTPRequest(ctx context.Context, client http.Client, method string, url string, headers map[string]string, body io.Reader) (resp *http.Response, err error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return
@@ -15,7 +15,7 @@ func HTTPRequest(ctx context.Context, method string, url string, headers map[str
 		req.Header.Set(k, v)
 	}
 
-	resp, err = http.DefaultClient.Do(req)
+	resp, err = client.Do(req)
 	if err != nil {
 		return
 	}

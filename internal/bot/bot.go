@@ -18,7 +18,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-var Logging iLogger
+var Logging Logger
 
 const (
 	TypeVideo    = 1
@@ -43,9 +43,9 @@ type MsgPayload struct {
 }
 
 func (m *TelegramBot) Inititalize(bot *tgbotapi.BotAPI) error {
-	ytdl.Logger = Logging
-	tiktok.Logger = Logging
-	instagram.Logger = Logging
+	ytdl.Logging = Logging
+	tiktok.Logging = Logging
+	instagram.Logging = Logging
 
 	m.bot = bot
 	m.fdbcache = make(map[int64]time.Time)
@@ -124,7 +124,6 @@ func usage(cmd string) string {
 	cmd = strings.TrimPrefix(cmd, "/")
 	lines := map[string]string{
 		"get":      "<URL> <caption (optional)> - Downloаd video from URL",
-		"feedback": "send your feedback to admin",
 	}
 	if _, ok := lines[cmd]; !ok {
 		return "Command not exist"
@@ -159,6 +158,8 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	defer cancel()
 
 	dctx := dcontext.NewDownloaderContext(ctx, n)
+
+	dctx.SetUrl(url)
 
 	videos, err := m.d.Download(dctx, url, label)
 	if err != nil {
@@ -211,36 +212,6 @@ func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
 				msg.Text = text
 
 				m.fetcher(msg)
-			case "feedback":
-				if v, ok := m.fdbcache[msg.Chat.ID]; ok {
-					if time.Now().Sub(v).Seconds() <= 30 {
-						return
-					}
-				}
-
-				m.fdbcache[msg.Chat.ID] = time.Now()
-
-				mc := tgbotapi.NewMessage(
-					m.Options.AdminID,
-					fmt.Sprintf("#feedback from %v\n\n%s", msg.Chat.UserName, msg.CommandArguments()),
-				)
-				_, err := m.bot.Send(mc)
-				if err != nil {
-					return
-				}
-
-				mc = tgbotapi.NewMessage(msg.Chat.ID, "Thanks for your feedback! ✅")
-
-				sent, err := m.bot.Send(mc)
-				if err != nil {
-					return
-				}
-				if len(sent) == 0 {
-					return
-				}
-
-				time.Sleep(10 * time.Second)
-				m.bot.Send(tgbotapi.NewDeleteMessage(msg.Chat.ID, sent[0].MessageID))
 			}
 		} else {
 			m.fetcher(msg)

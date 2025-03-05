@@ -2,11 +2,13 @@ package video
 
 import (
 	"io"
+	"os"
 )
 
 type Video struct {
 	Title  string
 	URL    string
+	Dir    string
 	Reader io.ReadCloser
 }
 
@@ -26,6 +28,7 @@ func (v *Video) Close() error {
 	if v.Reader == nil {
 		return nil
 	}
+	os.Remove(v.Dir)
 	return v.Reader.Close()
 }
 
