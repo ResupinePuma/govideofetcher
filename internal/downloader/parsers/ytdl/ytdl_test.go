@@ -48,7 +48,7 @@ func TestYTdl_Download(t *testing.T) {
 				Timeout:   30,
 			},
 			args: args{
-				u:   "https://youtube.com/shorts/mU8sm-1u504",
+				u:   "https://youtube.com/shorts/_XJLpu-LAUM",
 				ctx: context.Background(),
 			},
 		},

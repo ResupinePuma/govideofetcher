@@ -13,6 +13,7 @@ type DownloaderOpts struct {
 type YTDLOptions struct {
 	Format     string `yaml:"format"`
 	Executable string `yaml:"executable"`
+	FFmpeg     string `yaml:"ffmpeg"`
 	Headers    http.Header
 }
 

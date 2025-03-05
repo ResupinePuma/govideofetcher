@@ -29,6 +29,7 @@ type YtDl struct {
 	Timeout   int
 
 	Format     string
+	FFmpeg     string
 	Executable string
 	Headers    http.Header
 }
@@ -37,6 +38,7 @@ func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 	yt := YtDl{
 		SizeLimit: sizelim,
 		Headers:   http.Header{},
+		FFmpeg:    opts.FFmpeg,
 	}
 
 	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
@@ -81,9 +83,7 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 		"--max-filesize", "50M",
 		"--newline",
 		"--restrict-filenames",
-		"-f", yt.Format,
-		u.String(),
-		"-o", "res.mp4",
+		"-f", yt.Format, // скачиваем лучшее качество в формате mp4
 	)
 
 	if yt.Headers != nil {
@@ -91,6 +91,13 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 			line := fmt.Sprintf("%s: %s", k, strings.Join(v, "; "))
 			cmd.Args = append(cmd.Args, "--add-header", line)
 		}
+	}
+	if yt.FFmpeg != "" {
+		cmd.Args = append(cmd.Args, "--exec", fmt.Sprintf("%s -i {} %s %s", "ffmpeg", yt.FFmpeg, "res.mp4"))
+		cmd.Args = append(cmd.Args, u.String())
+	} else {
+		cmd.Args = append(cmd.Args, u.String())
+		cmd.Args = append(cmd.Args, "-o", "res.mp4")
 	}
 
 	// var w io.WriteCloser

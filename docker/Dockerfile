@@ -27,6 +27,11 @@ RUN wget https://github.com/yt-dlp/yt-dlp/archive/refs/tags/2024.10.07.tar.gz &&
 
 FROM python:3-alpine3.20
 WORKDIR /govf
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+    apk add --no-cache v4l-utils libv4l  && rm -rf /var/cache/apk/* \
+    else \
+      echo "$TARGETARCH"; \
+    fi
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /govf/build/videofetcher /govf/videofetcher
 COPY --from=ytdlp-builder /root/yt-dlp /usr/local/bin/
