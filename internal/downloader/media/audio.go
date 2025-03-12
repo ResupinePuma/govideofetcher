@@ -1,19 +1,22 @@
-package video
+package media
 
 import (
 	"io"
 	"os"
 )
 
-type Video struct {
-	Title  string
-	URL    string
-	Dir    string
-	Reader io.ReadCloser
+type Audio struct {
+	Title     string
+	URL       string
+	Dir       string
+	Thumbnail io.Reader
+	Duration  float64
+	Artist    string
+	Reader    io.ReadCloser
 }
 
-func NewVideo(title, url string, r io.ReadCloser) *Video {
-	v := Video{
+func NewAudio(title, url string, r io.ReadCloser) *Audio {
+	v := Audio{
 		Title:  title,
 		URL:    url,
 		Reader: r,
@@ -24,26 +27,26 @@ func NewVideo(title, url string, r io.ReadCloser) *Video {
 	return &v
 }
 
-func (v *Video) Close() error {
+func (v *Audio) Close() error {
 	if v.Reader == nil {
 		return nil
 	}
-	os.Remove(v.Dir)
+	os.RemoveAll(v.Dir)
 	return v.Reader.Close()
 }
 
-func (v *Video) NeedsUpload() bool {
+func (v *Audio) NeedsUpload() bool {
 	return true
 }
 
 // UploadData gets the file name and an `io.Reader` for the file to be uploaded. This
 // must only be called when the file needs to be uploaded.
-func (v *Video) UploadData() (string, io.Reader, error) {
+func (v *Audio) UploadData() (string, io.Reader, error) {
 	return v.Title, v.Reader, nil
 }
 
 // SendData gets the file data to send when a file does not need to be uploaded. This
 // must only be called when the file does not need to be uploaded.
-func (v *Video) SendData() string {
+func (v *Audio) SendData() string {
 	return v.Title
 }

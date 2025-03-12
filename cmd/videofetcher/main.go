@@ -3,6 +3,7 @@ package main
 import (
 	"videofetcher/internal/bot"
 	"videofetcher/internal/config"
+	"videofetcher/internal/downloader"
 	"videofetcher/internal/logging"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -13,6 +14,7 @@ func main() {
 	z, _ := zap.NewProduction()
 	Logger := logging.NewLogger(*z.Sugar())
 	bot.Logging = Logger
+	downloader.Logger = Logger
 
 	cfg, err := config.NewConfig()
 	if err != nil {

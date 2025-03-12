@@ -2,26 +2,31 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 	"videofetcher/internal/downloader"
 	"videofetcher/internal/downloader/dcontext"
+	"videofetcher/internal/downloader/media"
 	"videofetcher/internal/downloader/options"
 	"videofetcher/internal/downloader/parsers/instagram"
 	"videofetcher/internal/downloader/parsers/tiktok"
 	"videofetcher/internal/downloader/parsers/ytdl"
-	"videofetcher/internal/downloader/video"
 	"videofetcher/internal/notifier"
-	"videofetcher/internal/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-var Logging Logger
+var (
+	Logging       Logger
+	ErrInvalidUrl = errors.New("Invalid url")
+)
 
 const (
-	TypeVideo    = 1
+	TypeMedia    = 1
 	TypeFeedback = 2
 )
 
@@ -39,7 +44,7 @@ type MsgPayload struct {
 	Type      int
 	Text      string
 	SourceMsg *tgbotapi.Message
-	Videos    []video.Video
+	Media     []media.Media
 }
 
 func (m *TelegramBot) Inititalize(bot *tgbotapi.BotAPI) error {
@@ -72,49 +77,88 @@ func (m *TelegramBot) NewEditMessageText(chatID int64, messageID int, text strin
 func (m *TelegramBot) NewEditMessageTextAndMarkup(chatID int64, messageID int, text string, replyMarkup tgbotapi.InlineKeyboardMarkup) tgbotapi.EditMessageTextConfig {
 	return tgbotapi.NewEditMessageText(chatID, messageID, text)
 }
-func (m *TelegramBot) Send(c tgbotapi.Chattable) ([]tgbotapi.Message, error) {
-	return m.bot.Send(c)
+func (m *TelegramBot) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+	res, err := m.bot.Send(c)
+	if err != nil {
+		return res, nil
+	}
+	return res, nil
 }
 
-func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg []tgbotapi.Message) {
+func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg tgbotapi.Message, err error) {
 	var msg tgbotapi.Chattable
+	var re = regexp.MustCompile(`(?m).(webm|mp4|mkv|gif|flv|avi|mov|wmv|asf)`)
 	switch payload.Type {
-	case TypeVideo:
-		switch p := payload; {
-		case p.Videos != nil:
-			defer func() {
-				for _, vid := range p.Videos {
-					vid.Close()
-				}
-			}()
-
-			vids := []interface{}{}
-			for _, vid := range p.Videos {
-				media := tgbotapi.NewInputMediaVideo(&vid)
-				if len(vid.Title) <= 1024 {
-					media.Caption = vid.Title
-				}
-				media.SupportsStreaming = true
-				vids = append(vids, media)
-			}
-			group := tgbotapi.NewMediaGroup(payload.SourceMsg.Chat.ID, vids)
-			msg = group
-		default:
+	case TypeMedia:
+		if len(payload.Media) == 0 {
 			msgt := tgbotapi.NewMessage(payload.SourceMsg.Chat.ID, payload.Text)
 			msg = msgt
+			break
 		}
-	case TypeFeedback:
-		msgt := tgbotapi.NewMessage(payload.SourceMsg.Chat.ID, payload.Text)
+
+		items := make([]interface{}, 0, len(payload.Media))
+		for _, m := range payload.Media {
+			defer m.Close()
+			switch v := m.(type) {
+			case *media.Video:
+				vid := tgbotapi.NewInputMediaVideo(v)
+				if payload.Text != "" {
+					v.Title = payload.Text
+				}
+				v.Title = re.ReplaceAllString(v.Title, "")
+				if len(v.Title) <= 1024 {
+					vid.Caption = v.Title
+				}
+				if payload.Text != "" {
+					vid.Caption = payload.Text
+				}
+
+				if v.Thumbnail != nil {
+					vid.Thumb = tgbotapi.FileReader{
+						Name:   "thumbnail.png",
+						Reader: v.Thumbnail,
+					}
+				}
+				vid.Duration = int(v.Duration)
+				vid.SupportsStreaming = true
+				items = append(items, vid)
+			case *media.Audio:
+				mus := tgbotapi.NewInputMediaAudio(v)
+				if payload.Text != "" {
+					v.Title = payload.Text
+				}
+				v.Title = re.ReplaceAllString(v.Title, "")
+				mus.Title = v.Title
+				mus.Performer = v.Artist
+				mus.Duration = int(v.Duration)
+				if v.Thumbnail != nil {
+					mus.Thumb = tgbotapi.FileReader{
+						Name:   "thumbnail.png",
+						Reader: v.Thumbnail,
+					}
+				}
+				items = append(items, mus)
+			}
+		}
+		msgt := tgbotapi.NewMediaGroup(payload.SourceMsg.Chat.ID, items)
 		msg = msgt
+
 	default:
 		msgt := tgbotapi.NewMessage(payload.SourceMsg.Chat.ID, payload.Text)
-		msg = msgt
+		msg = &msgt
 	}
 
-	rmsg, err := m.Send(msg)
+	if msg == nil {
+		return
+	}
+
+	rmsg, err = m.Send(msg)
 	if err != nil {
 		Logging.Errorf("err sending a message: %v", err)
-		m.SendMsg(&MsgPayload{Text: GetErrMsg(err), SourceMsg: payload.SourceMsg})
+		_, e := m.SendMsg(&MsgPayload{Text: GetErrMsg(err), SourceMsg: payload.SourceMsg})
+		if e != nil {
+			return rmsg, e
+		}
 	}
 	Logging.Infof("msg successfully sent to: %v", payload.SourceMsg.Chat.ID)
 	return
@@ -123,7 +167,7 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg []tgbotapi.Message) {
 func usage(cmd string) string {
 	cmd = strings.TrimPrefix(cmd, "/")
 	lines := map[string]string{
-		"get":      "<URL> <caption (optional)> - Downloаd video from URL",
+		"get": "<URL> <caption (optional)> - Downloаd video from URL",
 	}
 	if _, ok := lines[cmd]; !ok {
 		return "Command not exist"
@@ -132,10 +176,26 @@ func usage(cmd string) string {
 	return fmt.Sprintf("/%s %s", cmd, lines[cmd])
 }
 
+func extractUrlAndText(str string) (addr *url.URL, label string, err error) {
+	re := regexp.MustCompile(`(?m)(https?:\/\/[^\s]+)`)
+	ustr := re.FindString(str)
+	if ustr == "" {
+		err = errors.New("invalid url")
+		return
+	}
+	addr, errp := url.ParseRequestURI(ustr)
+	if errp != nil {
+		err = errors.New("invalid url")
+		return
+	}
+	label = strings.TrimSpace(strings.Replace(str, addr.String(), "", -1))
+	return
+}
+
 func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	ctx := context.Background()
 
-	url, label, err := utils.ExtractUrlAndText(msg.Text)
+	url, label, err := extractUrlAndText(msg.Text)
 	if err != nil {
 		return
 	}
@@ -161,20 +221,21 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 
 	dctx.SetUrl(url)
 
-	videos, err := m.d.Download(dctx, url, label)
+	media, err := m.d.Download(dctx, url)
 	if err != nil {
 		Logging.Errorf("err download video %s: %v", msg.Text, err)
 		n.UpdTextNotify(GetErrMsg(err))
 		return
 	}
 
-	if len(videos) > 1 {
-		n.UpdTextNotify(fmt.Sprintf("📣 I found %v videos. Start sending", len(videos)))
+	if len(media) > 1 {
+		n.UpdTextNotify(fmt.Sprintf("📣 I found %v media. Start sending", len(media)))
 	}
 
 	m.SendMsg(&MsgPayload{
-		Type:      TypeVideo,
-		Videos:    videos,
+		Type:      TypeMedia,
+		Text:      label,
+		Media:     media,
 		SourceMsg: &msg,
 	})
 
@@ -197,16 +258,16 @@ func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
 			case "get":
 				text := msg.CommandArguments()
 				if text == "" {
-					sent := m.SendMsg(&MsgPayload{
-						Type:      TypeVideo,
+					sent, e := m.SendMsg(&MsgPayload{
+						Type:      TypeMedia,
 						Text:      usage(msg.Command()),
 						SourceMsg: &msg,
 					})
-					if len(sent) == 0 {
+					if e != nil {
 						return
 					}
 					time.Sleep(10 * time.Second)
-					m.bot.Send(tgbotapi.NewDeleteMessage(msg.Chat.ID, sent[0].MessageID))
+					m.bot.Send(tgbotapi.NewDeleteMessage(msg.Chat.ID, sent.MessageID))
 					return
 				}
 				msg.Text = text

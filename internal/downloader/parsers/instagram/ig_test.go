@@ -11,6 +11,7 @@ import (
 	"testing"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/logging"
+	"videofetcher/internal/proxiedHTTP"
 )
 
 type notitier struct{}
@@ -72,6 +73,8 @@ func TestIG_Download(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tk := &IG{
 				Timeout: tt.fields.Timeout,
+
+				Client: proxiedHTTP.NewProxiedHTTPClient(os.Getenv("HTTPS_PROXY")),
 			}
 			u, _ := url.Parse(tt.args.url)
 			tt.args.ctx.SetUrl(u)
@@ -88,7 +91,8 @@ func TestIG_Download(t *testing.T) {
 				}
 				res, _ := os.Create("res.mp4")
 				for _, v := range vid {
-					io.Copy(res, v.Reader)
+					_, r, _ := v.UploadData()
+					io.Copy(res, r)
 				}
 
 			}()

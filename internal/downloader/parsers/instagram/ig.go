@@ -10,16 +10,13 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	cr "videofetcher/internal/counting_reader"
+	"videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/derrors"
-	v "videofetcher/internal/downloader/video"
-	"videofetcher/internal/utils"
-
-	"github.com/dop251/goja"
+	"videofetcher/internal/downloader/media"
 
 	"github.com/antchfx/htmlquery"
+	"github.com/dop251/goja"
 )
 
 var (
@@ -42,19 +39,26 @@ type IGInfo struct {
 	Data   string `json:"data"`
 }
 
-func NewParser(sizelim int64) *IG {
+func NewParser(sizelim int64, c http.Client) *IG {
 	return &IG{
 		SizeLimit: sizelim,
-		Client:    *http.DefaultClient,
+		Client:    c,
 	}
 }
 
 func (tt *IG) getToken(ctx context.Context) error {
-	resp, err := utils.HTTPRequest(ctx, tt.Client, http.MethodGet, "https://snapinst.app",
-		map[string]string{
-			"User-Agent": UA,
-		},
-		nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://snapinst.app", nil)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range map[string]string{
+		"User-Agent": UA,
+	} {
+		req.Header.Add(k, v)
+	}
+
+	resp, err := tt.Client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -78,7 +82,7 @@ func (tt *IG) getToken(ctx context.Context) error {
 	return nil
 }
 
-func parseIgVideo(body string) (tv []v.Video, err error) {
+func parseIgVideo(body string) (tv []media.Video, err error) {
 	body = strings.ReplaceAll(body, `\"`, `"`)
 
 	ps := strings.Replace(body, "return decodeURIComponent(escape(r))", `def = decodeURIComponent(escape(r)).replace(/\n/g, '').replace(/\\"/g, '"');`, -1)
@@ -104,7 +108,7 @@ func parseIgVideo(body string) (tv []v.Video, err error) {
 	}
 	for _, vd := range t {
 		tv = append(tv,
-			*v.NewVideo("", htmlquery.SelectAttr(vd, "href"), nil),
+			*media.NewVideo("", htmlquery.SelectAttr(vd, "href"), nil),
 		)
 	}
 	if len(tv) == 0 {
@@ -115,7 +119,7 @@ func parseIgVideo(body string) (tv []v.Video, err error) {
 }
 
 func (i *IG) Download(ctx *dcontext.Context) (err error) {
-	ctx.Notifier().UpdTextNotify("‍🔍 searching video")
+	ctx.Notifier().UpdTextNotify("‍🔍 searching media")
 
 	if i.token == "" || time.Now().Sub(i.lastTokenUpd) > time.Minute*5 {
 		err = i.getToken(ctx)
@@ -133,14 +137,23 @@ func (i *IG) Download(ctx *dcontext.Context) (err error) {
 	w.WriteField("token", i.token)
 	w.Close()
 
-	resp, err := utils.HTTPRequest(ctx, i.Client, http.MethodPost, "https://snapinst.app/action2.php", map[string]string{
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://snapinst.app/action2.php", &buff)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range map[string]string{
 		"User-Agent":   UA,
 		"Content-Type": w.FormDataContentType(),
 		"Origin":       "https://snapinst.app",
 		"Referer":      "https://snapinst.app/",
-	}, &buff)
+	} {
+		req.Header.Add(k, v)
+	}
+
+	resp, err := i.Client.Do(req)
 	if err != nil {
-		return
+		return err
 	}
 
 	if resp.StatusCode != 200 {
@@ -160,29 +173,38 @@ func (i *IG) Download(ctx *dcontext.Context) (err error) {
 
 	//dr := dresult.NewDownloaderResult(ctx)
 
-	var vids []v.Video
+	var vids []media.Media
 
-	ctx.Notifier().UpdTextNotify("😵⏬ downloading video")
+	ctx.Notifier().UpdTextNotify("😵⏬ downloading media")
 	go ctx.Notifier().StartTicker(ctx)
 	for num, vid := range ttv {
 		if num >= 10 {
 			break
 		}
 
-		resp, err = utils.HTTPRequest(ctx, i.Client, http.MethodGet, vid.URL, map[string]string{
-			"User-Agent": UA,
-		}, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, vid.URL, nil)
 		if err != nil {
-			return
+			return err
 		}
 
-		cropts := cr.CountingReaderOpts{
+		for k, v := range map[string]string{
+			"User-Agent": UA,
+		} {
+			req.Header.Add(k, v)
+		}
+
+		resp, err := i.Client.Do(req)
+		if err != nil {
+			return err
+		}
+
+		cropts := counting_reader.CountingReaderOpts{
 			ByteLimit: i.SizeLimit,
 			FileSize:  float64(resp.ContentLength),
 		}
 
 		vids = append(vids,
-			*v.NewVideo(u.String(), vid.URL, cr.NewCountingReader(resp.Body, &cropts)),
+			media.NewVideo(u.String(), vid.URL, counting_reader.NewCountingReader(resp.Body, &cropts)),
 		)
 	}
 

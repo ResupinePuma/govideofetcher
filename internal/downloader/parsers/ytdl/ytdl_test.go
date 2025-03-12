@@ -52,17 +52,6 @@ func TestYTdl_Download(t *testing.T) {
 				ctx: context.Background(),
 			},
 		},
-		// {
-		// 	name: "9gag",
-		// 	fields: fields{
-		// 		SizeLimit: 50 * 1024 * 1024,
-		// 		Timeout:   30,
-		// 	},
-		// 	args: args{
-		// 		url: "https://youtube.com/shorts/QbGyVwblgQQ?feature=share",
-		// 		ctx: context.Background(),
-		// 	},
-		// },
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -89,7 +78,8 @@ func TestYTdl_Download(t *testing.T) {
 				}
 				res, _ := os.Create("res.mp4")
 				for _, v := range vid {
-					io.Copy(res, v.Reader)
+					_, r, _ := v.UploadData()
+					io.Copy(res, r)
 				}
 
 			}()

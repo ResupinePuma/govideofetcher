@@ -21,4 +21,4 @@ require (
 	golang.org/x/text v0.18.0 // indirect
 )
 
-replace github.com/go-telegram-bot-api/telegram-bot-api/v5 => ./internal/telegram-bot-api/
+//replace github.com/go-telegram-bot-api/telegram-bot-api/v5 => ./internal/telegram-bot-api/

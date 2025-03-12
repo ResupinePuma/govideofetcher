@@ -15,8 +15,7 @@ import (
 
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
-	v "videofetcher/internal/downloader/video"
-	"videofetcher/internal/utils"
+	v "videofetcher/internal/downloader/media"
 )
 
 var (
@@ -68,19 +67,26 @@ type TikTok struct {
 	lastTokenUpd time.Time
 }
 
-func NewParser(sizelim int64) *TikTok {
+func NewParser(sizelim int64, c http.Client) *TikTok {
 	return &TikTok{
 		SizeLimit: sizelim,
-		Client:    *http.DefaultClient,
+		Client:    c,
 	}
 }
 
 func (tt *TikTok) getToken(ctx context.Context) error {
-	resp, err := utils.HTTPRequest(ctx, tt.Client, http.MethodGet, REF,
-		map[string]string{
-			"User-Agent": UA,
-		},
-		nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, REF, nil)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range map[string]string{
+		"User-Agent": UA,
+	} {
+		req.Header.Add(k, v)
+	}
+
+	resp, err := tt.Client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -109,9 +115,18 @@ func (tt *TikTok) getJsData(ctx context.Context, u string, headers map[string]st
 	data.Set("url", u)
 	data.Set("token", tt.token)
 
-	resp, err := utils.HTTPRequest(ctx, tt.Client, http.MethodPost, "https://snaptik.app/abc2.php", headers, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://snaptik.app/abc2.php", strings.NewReader(data.Encode()))
 	if err != nil {
-		return
+		return js, err
+	}
+
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
+
+	resp, err := tt.Client.Do(req)
+	if err != nil {
+		return js, err
 	}
 
 	if resp.StatusCode != 200 {
@@ -145,13 +160,13 @@ func (tt *TikTok) Download(ctx *dcontext.Context) (err error) {
 		"Referer":      REF,
 	}
 
-	ctx.Notifier().UpdTextNotify("‍🔍 searching video")
+	ctx.Notifier().UpdTextNotify("‍🔍 searching media")
 	ps, err := tt.getJsData(ctx, u.String(), headers)
 	if err != nil {
 		return
 	}
 
-	ctx.Notifier().UpdTextNotify("‍🔍 getting video info")
+	ctx.Notifier().UpdTextNotify("‍🔍 getting media info")
 	vm := goja.New()
 	vm.Set("def", "")
 	_, err = vm.RunString(ps)
@@ -161,7 +176,7 @@ func (tt *TikTok) Download(ctx *dcontext.Context) (err error) {
 	vi := vm.Get("def")
 	ta := aaaa.FindStringSubmatch(vi.String())
 	if len(ta) < 2 {
-		err = fmt.Errorf("video not found")
+		err = fmt.Errorf("media not found")
 		return
 	}
 
@@ -172,11 +187,21 @@ func (tt *TikTok) Download(ctx *dcontext.Context) (err error) {
 
 	//dr := dresult.NewDownloaderResult(ctx)
 
-	ctx.Notifier().UpdTextNotify("‍⏬ downloading video")
+	ctx.Notifier().UpdTextNotify("‍⏬ downloading media")
 	go ctx.Notifier().StartTicker(ctx)
-	resp, err := utils.HTTPRequest(ctx, tt.Client, http.MethodGet, tv.URL, headers, nil)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tv.URL, nil)
 	if err != nil {
-		return
+		return err
+	}
+
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
+
+	resp, err := tt.Client.Do(req)
+	if err != nil {
+		return err
 	}
 
 	cropts := cr.CountingReaderOpts{
@@ -184,7 +209,7 @@ func (tt *TikTok) Download(ctx *dcontext.Context) (err error) {
 		FileSize:  float64(resp.ContentLength),
 	}
 
-	ctx.AddResult([]v.Video{*v.NewVideo(tv.Title, u.String(), cr.NewCountingReader(resp.Body, &cropts))})
+	ctx.AddResult([]v.Media{v.NewVideo(tv.Title, u.String(), cr.NewCountingReader(resp.Body, &cropts))})
 
 	close(ctx.Results())
 

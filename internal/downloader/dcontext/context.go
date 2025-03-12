@@ -3,7 +3,7 @@ package dcontext
 import (
 	"context"
 	"net/url"
-	"videofetcher/internal/downloader/video"
+	"videofetcher/internal/downloader/media"
 )
 
 type IDownloader interface {
@@ -23,7 +23,7 @@ type Context struct {
 
 	u *url.URL
 
-	results chan []video.Video
+	results chan []media.Media
 }
 
 func NewDownloaderContext(ctx context.Context, notifier iNotifier) *Context {
@@ -31,7 +31,7 @@ func NewDownloaderContext(ctx context.Context, notifier iNotifier) *Context {
 	return &Context{
 		Context: ctx,
 		n:       notifier,
-		results: make(chan []video.Video),
+		results: make(chan []media.Media),
 	}
 }
 
@@ -51,13 +51,13 @@ func (c *Context) Notifier() iNotifier {
 	return c.n
 }
 
-func (c *Context) Results() chan []video.Video {
+func (c *Context) Results() chan []media.Media {
 	return c.results
 }
 
-func (c *Context) AddResult(v []video.Video) {
+func (c *Context) AddResult(v []media.Media) {
 	if c.results == nil {
-		c.results = make(chan []video.Video)
+		c.results = make(chan []media.Media)
 	}
 	c.results <- v
 }

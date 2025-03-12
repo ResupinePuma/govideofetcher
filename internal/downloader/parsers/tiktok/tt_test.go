@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"videofetcher/internal/downloader/dcontext"
+	"videofetcher/internal/proxiedHTTP"
 )
 
 type notitier struct{}
@@ -18,23 +19,6 @@ var client http.Client
 
 func (l *notitier) UpdTextNotify(text string) (err error)       { log.Println(text); return }
 func (l *notitier) StartTicker(ctx context.Context) (err error) { return }
-
-func TestMain(m *testing.M) {
-	proxyURL, err := url.Parse(os.Getenv("HTTPS_PROXY"))
-	if err != nil {
-		panic(err)
-	}
-
-	transport := &http.Transport{
-		Proxy: http.ProxyURL(proxyURL),
-	}
-
-	client = http.Client{
-		Transport: transport,
-	}
-
-	os.Exit(m.Run())
-}
 
 func TestTikTok_Download(t *testing.T) {
 	type fields struct {
@@ -69,7 +53,7 @@ func TestTikTok_Download(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tk := &TikTok{
 				SizeLimit: 10000000,
-				Client:    client,
+				Client:    proxiedHTTP.NewProxiedHTTPClient(os.Getenv("HTTPS_PROXY")),
 			}
 
 			u, _ := url.Parse(tt.args.url)
@@ -87,7 +71,8 @@ func TestTikTok_Download(t *testing.T) {
 				}
 				res, _ := os.Create("res.mp4")
 				for _, v := range vid {
-					io.Copy(res, v.Reader)
+					_, r, _ := v.UploadData()
+					io.Copy(res, r)
 				}
 
 			}()

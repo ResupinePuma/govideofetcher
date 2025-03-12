@@ -20,7 +20,7 @@ type iTelegram interface {
 	NewEditMessageText(chatID int64, messageID int, text string) tgbotapi.EditMessageTextConfig
 	//NewInlineKeyboardButtonData(text, data string) tgbotapi.InlineKeyboardButton
 	NewEditMessageTextAndMarkup(chatID int64, messageID int, text string, replyMarkup tgbotapi.InlineKeyboardMarkup) tgbotapi.EditMessageTextConfig
-	Send(c tgbotapi.Chattable) ([]tgbotapi.Message, error)
+	Send(c tgbotapi.Chattable) (tgbotapi.Message, error)
 }
 
 type MsgNotifier struct {
@@ -31,13 +31,13 @@ type MsgNotifier struct {
 	oldMsg string
 
 	bot  iTelegram
-	pbar bool
+	stop chan bool
 }
 
 func NewMsgNotifier(bot iTelegram, chatid int64) *MsgNotifier {
 	return &MsgNotifier{
 		bot:    bot,
-		pbar:   true,
+		stop:   make(chan bool, 1),
 		ChatID: chatid,
 	}
 }
@@ -97,8 +97,8 @@ func (m *MsgNotifier) SendNotify(text string) (err error) {
 	if err != nil {
 		return err
 	}
-	m.ChatID = resp[0].Chat.ID
-	m.MsgID = resp[0].MessageID
+	m.ChatID = resp.Chat.ID
+	m.MsgID = resp.MessageID
 	return
 }
 
