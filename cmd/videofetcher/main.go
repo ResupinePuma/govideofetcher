@@ -5,6 +5,7 @@ import (
 	"videofetcher/internal/config"
 	"videofetcher/internal/downloader"
 	"videofetcher/internal/logging"
+	"videofetcher/internal/userdb"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"go.uber.org/zap"
@@ -42,8 +43,14 @@ func main() {
 
 	updates := api.GetUpdatesChan(u)
 
+	udb, err := userdb.NewUserStorage("configs/users.db")
+	if err != nil {
+		Logger.Panic(err)
+	}
+
 	b := bot.TelegramBot{
 		Options: cfg.DownloaderOpts,
+		Userdb:  udb,
 	}
 	err = b.Inititalize(api)
 	if err != nil {

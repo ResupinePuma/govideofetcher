@@ -208,8 +208,7 @@ func (tt *TikTok) Download(ctx *dcontext.Context) (err error) {
 		ByteLimit: tt.SizeLimit,
 		FileSize:  float64(resp.ContentLength),
 	}
-
-	ctx.AddResult([]v.Media{v.NewVideo(tv.Title, u.String(), cr.NewCountingReader(resp.Body, &cropts))})
+	ctx.AddResult([]v.Media{v.NewVideo(tv.Title+".mp4", tv.Title, u.String(), cr.NewCountingReader(resp.Body, &cropts))})
 
 	close(ctx.Results())
 

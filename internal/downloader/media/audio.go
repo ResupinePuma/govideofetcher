@@ -12,14 +12,16 @@ type Audio struct {
 	Thumbnail io.Reader
 	Duration  float64
 	Artist    string
+	Filename  string
 	Reader    io.ReadCloser
 }
 
-func NewAudio(title, url string, r io.ReadCloser) *Audio {
+func NewAudio(fielname, title, url string, r io.ReadCloser) *Audio {
 	v := Audio{
-		Title:  title,
-		URL:    url,
-		Reader: r,
+		Title:    title,
+		URL:      url,
+		Reader:   r,
+		Filename: fielname,
 	}
 	if v.Title == "" {
 		v.Title = url
@@ -42,11 +44,11 @@ func (v *Audio) NeedsUpload() bool {
 // UploadData gets the file name and an `io.Reader` for the file to be uploaded. This
 // must only be called when the file needs to be uploaded.
 func (v *Audio) UploadData() (string, io.Reader, error) {
-	return v.Title, v.Reader, nil
+	return SanitizeFileName(v.Filename), v.Reader, nil
 }
 
 // SendData gets the file data to send when a file does not need to be uploaded. This
 // must only be called when the file does not need to be uploaded.
 func (v *Audio) SendData() string {
-	return v.Title
+	return SanitizeFileName(v.Filename)
 }

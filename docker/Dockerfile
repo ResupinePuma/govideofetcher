@@ -3,7 +3,7 @@ ARG TARGETARCH
 
 WORKDIR /govf
 COPY . /govf
-RUN apk update && apk upgrade -a && apk add --no-cache curl ca-certificates build-base
+RUN apk update && apk upgrade -a && apk add --no-cache curl ca-certificates build-base sqlite
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
         curl -L -o /usr/local/bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-x64; \
         curl -L -o /usr/local/bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffprobe-linux-x64; \

@@ -3,6 +3,8 @@ package instagram
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -108,7 +110,7 @@ func parseIgVideo(body string) (tv []media.Video, err error) {
 	}
 	for _, vd := range t {
 		tv = append(tv,
-			*media.NewVideo("", htmlquery.SelectAttr(vd, "href"), nil),
+			*media.NewVideo("", "", htmlquery.SelectAttr(vd, "href"), nil),
 		)
 	}
 	if len(tv) == 0 {
@@ -203,8 +205,9 @@ func (i *IG) Download(ctx *dcontext.Context) (err error) {
 			FileSize:  float64(resp.ContentLength),
 		}
 
+		vn := md5.Sum([]byte(vid.URL))
 		vids = append(vids,
-			media.NewVideo(u.String(), vid.URL, counting_reader.NewCountingReader(resp.Body, &cropts)),
+			media.NewVideo(hex.EncodeToString(vn[:])+".mp4", u.String(), vid.URL, counting_reader.NewCountingReader(resp.Body, &cropts)),
 		)
 	}
 

@@ -16,6 +16,7 @@ import (
 	"videofetcher/internal/downloader/parsers/tiktok"
 	"videofetcher/internal/downloader/parsers/ytdl"
 	"videofetcher/internal/notifier"
+	"videofetcher/internal/userdb"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -32,6 +33,7 @@ const (
 
 type TelegramBot struct {
 	Options options.DownloaderOpts
+	Userdb  *userdb.UserDB
 
 	vidCache map[string]bool
 	fdbcache map[int64]time.Time
@@ -220,6 +222,8 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	dctx := dcontext.NewDownloaderContext(ctx, n)
 
 	dctx.SetUrl(url)
+
+	m.Userdb.Add(int(msg.Chat.ID), msg.Chat.UserName, msg.Text)
 
 	media, err := m.d.Download(dctx, url)
 	if err != nil {

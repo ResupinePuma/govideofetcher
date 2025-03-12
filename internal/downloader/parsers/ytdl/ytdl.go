@@ -314,6 +314,7 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 			URL:       u.String(),
 			Dir:       tempPath,
 			Duration:  info.Duration,
+			Filename:  info.Title + ".mp4",
 		})
 	case modeAudio:
 		m = append(m, &v.Audio{
@@ -324,6 +325,7 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 			Artist:    info.Artist,
 			Dir:       tempPath,
 			Duration:  info.Duration,
+			Filename:  strings.Join([]string{info.Artist, info.Title}, "-") + ".mp3",
 		})
 	}
 	ctx.AddResult(m)

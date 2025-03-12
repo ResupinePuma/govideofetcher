@@ -6,6 +6,7 @@ require (
 	github.com/antchfx/htmlquery v1.3.1
 	github.com/dop251/goja v0.0.0-20240220182346-e401ed450204
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	github.com/mattn/go-sqlite3 v1.14.24
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v2 v2.4.0
 )

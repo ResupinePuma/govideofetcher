@@ -12,9 +12,11 @@ type Video struct {
 	Dir       string
 	Duration  float64
 	Reader    io.ReadCloser
+
+	Filename string
 }
 
-func NewVideo(title, url string, r io.ReadCloser) *Video {
+func NewVideo(filename, title, url string, r io.ReadCloser) *Video {
 	v := Video{
 		Title:  title,
 		URL:    url,
@@ -41,11 +43,11 @@ func (v *Video) NeedsUpload() bool {
 // UploadData gets the file name and an `io.Reader` for the file to be uploaded. This
 // must only be called when the file needs to be uploaded.
 func (v *Video) UploadData() (string, io.Reader, error) {
-	return v.Title, v.Reader, nil
+	return SanitizeFileName(v.Filename), v.Reader, nil
 }
 
 // SendData gets the file data to send when a file does not need to be uploaded. This
 // must only be called when the file does not need to be uploaded.
 func (v *Video) SendData() string {
-	return v.Title
+	return SanitizeFileName(v.Filename)
 }
