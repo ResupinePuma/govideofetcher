@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf16"
 	"videofetcher/internal/downloader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/media"
@@ -29,6 +30,8 @@ var (
 const (
 	TypeMedia    = 1
 	TypeFeedback = 2
+
+	LinkMsg = "🔗Link"
 )
 
 type TelegramBot struct {
@@ -43,10 +46,11 @@ type TelegramBot struct {
 }
 
 type MsgPayload struct {
-	Type      int
-	Text      string
-	SourceMsg *tgbotapi.Message
-	Media     []media.Media
+	Type        int
+	Text        string
+	OriginalURL *url.URL
+	SourceMsg   *tgbotapi.Message
+	Media       []media.Media
 }
 
 func (m *TelegramBot) Inititalize(bot *tgbotapi.BotAPI) error {
@@ -86,6 +90,9 @@ func (m *TelegramBot) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
 	}
 	return res, nil
 }
+func utf16Len(s string) int {
+	return len(utf16.Encode([]rune(s)))
+}
 
 func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg tgbotapi.Message, err error) {
 	var msg tgbotapi.Chattable
@@ -107,12 +114,22 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg tgbotapi.Message, err e
 				if payload.Text != "" {
 					v.Title = payload.Text
 				}
-				v.Title = re.ReplaceAllString(v.Title, "")
-				if len(v.Title) <= 1024 {
-					vid.Caption = v.Title
+				if v.Title != "" {
+					v.Title = re.ReplaceAllString(v.Title, "")
+					if len(v.Title) <= 1024 {
+						vid.Caption = v.Title
+					}
+					vid.Caption += "\n\n" + LinkMsg
+				} else {
+					vid.Caption += LinkMsg
 				}
-				if payload.Text != "" {
-					vid.Caption = payload.Text
+				vid.CaptionEntities = []tgbotapi.MessageEntity{
+					{
+						Type:   "text_link",
+						Offset: utf16Len(vid.Caption) - utf16Len(LinkMsg),
+						Length: utf16Len(LinkMsg),
+						URL:    payload.OriginalURL.String(),
+					},
 				}
 
 				if v.Thumbnail != nil {
@@ -138,6 +155,15 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg tgbotapi.Message, err e
 						Name:   "thumbnail.png",
 						Reader: v.Thumbnail,
 					}
+				}
+				mus.Caption += LinkMsg
+				mus.CaptionEntities = []tgbotapi.MessageEntity{
+					{
+						Type:   "text_link",
+						Offset: utf16Len(mus.Caption) - utf16Len(LinkMsg),
+						Length: utf16Len(LinkMsg),
+						URL:    payload.OriginalURL.String(),
+					},
 				}
 				items = append(items, mus)
 			}
@@ -237,10 +263,11 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	}
 
 	m.SendMsg(&MsgPayload{
-		Type:      TypeMedia,
-		Text:      label,
-		Media:     media,
-		SourceMsg: &msg,
+		Type:        TypeMedia,
+		Text:        label,
+		Media:       media,
+		OriginalURL: url,
+		SourceMsg:   &msg,
 	})
 
 	n.UpdTextNotify("Done! ✅")
