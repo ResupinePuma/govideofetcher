@@ -28,7 +28,8 @@ func NewUserStorage(dbPath string) (*UserDB, error) {
 				username TEXT,
 				first_seen DATETIME,
 				last_seen DATETIME,
-				last_message TEXT
+				last_message TEXT,
+				download_count INTEGER DEFAULT 1
 			)
 		`)
 		if err != nil {
@@ -58,7 +59,8 @@ func (us *UserDB) Add(userID int, username, message string) error {
 		ON CONFLICT(user_id) DO UPDATE SET
 			username = excluded.username,
 			last_seen = excluded.last_seen,
-			last_message = excluded.last_message
+			last_message = excluded.last_message,
+			download_count = users.download_count + 1
 	`, userID, username, now, now, message)
 	return err
 }
