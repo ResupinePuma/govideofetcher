@@ -21,7 +21,8 @@ type Context struct {
 	context.Context
 	n iNotifier
 
-	u *url.URL
+	u    *url.URL
+	lang string
 
 	results chan []media.Media
 }
@@ -41,6 +42,14 @@ func (c *Context) GetUrl() *url.URL {
 
 func (c *Context) SetUrl(u *url.URL) {
 	c.u = u
+}
+
+func (c *Context) GetLang() string {
+	return c.lang
+}
+
+func (c *Context) SetLang(l string) {
+	c.lang = l
 }
 
 // func (c *Context) SetProgress(percent float64) error {

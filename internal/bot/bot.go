@@ -248,6 +248,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	dctx := dcontext.NewDownloaderContext(ctx, n)
 
 	dctx.SetUrl(url)
+	dctx.SetLang(msg.From.LanguageCode)
 
 	m.Userdb.Add(int(msg.Chat.ID), msg.Chat.UserName, msg.Text)
 

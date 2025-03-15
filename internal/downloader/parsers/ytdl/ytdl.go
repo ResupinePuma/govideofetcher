@@ -146,6 +146,9 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 		return tempErr
 	}
 
+	lang := ctx.GetLang()
+	yt.Format = strings.ReplaceAll(yt.Format, "language={}", fmt.Sprintf("language^=%s", lang))
+
 	cmd := exec.CommandContext(
 		ctx,
 		YTDlPath,
