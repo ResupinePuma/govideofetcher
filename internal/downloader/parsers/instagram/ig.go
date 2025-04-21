@@ -2,23 +2,18 @@ package instagram
 
 import (
 	"bytes"
-	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
+	"net/url"
 	"regexp"
-	"strings"
 	"time"
 	"videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
-	"videofetcher/internal/downloader/derrors"
 	"videofetcher/internal/downloader/media"
-
-	"github.com/antchfx/htmlquery"
-	"github.com/dop251/goja"
 )
 
 var (
@@ -36,9 +31,14 @@ type IG struct {
 	lastTokenUpd time.Time
 }
 
-type IGInfo struct {
+type IGVIdeo struct {
 	Status string `json:"status"`
-	Data   string `json:"data"`
+	Data   []struct {
+		Title       string `json:"title"`
+		Thumbnail   string `json:"thumbnail"`
+		DownloadURL string `json:"downloadUrl"`
+		VideoURL    string `json:"videoUrl"`
+	} `json:"data"`
 }
 
 func NewParser(sizelim int64, c http.Client) *IG {
@@ -48,107 +48,26 @@ func NewParser(sizelim int64, c http.Client) *IG {
 	}
 }
 
-func (tt *IG) getToken(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://snapinst.app", nil)
-	if err != nil {
-		return err
-	}
-
-	for k, v := range map[string]string{
-		"User-Agent": UA,
-	} {
-		req.Header.Add(k, v)
-	}
-
-	resp, err := tt.Client.Do(req)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("bad status code: %v", resp.StatusCode)
-	}
-
-	page, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	tokens := re.FindSubmatch(page)
-	if tokens == nil {
-		return fmt.Errorf("token not found")
-	}
-
-	tt.token = string(tokens[len(tokens)-1])
-	tt.lastTokenUpd = time.Now()
-	return nil
-}
-
-func parseIgVideo(body string) (tv []media.Video, err error) {
-	body = strings.ReplaceAll(body, `\"`, `"`)
-
-	ps := strings.Replace(body, "return decodeURIComponent(escape(r))", `def = decodeURIComponent(escape(r)).replace(/\n/g, '').replace(/\\"/g, '"');`, -1)
-
-	//fmt.Printf("%s", ps)
-	vm := goja.New()
-	vm.Set("def", "")
-	_, err = vm.RunString(ps)
-	if err != nil {
-		return
-	}
-	vi := vm.Get("def")
-
-	doc, err := htmlquery.Parse(strings.NewReader(vi.String()))
-	if err != nil {
-		return
-	}
-
-	t := htmlquery.Find(doc, `//div[@class="download-bottom"]/a`)
-	if t == nil {
-		err = derrors.ErrNotFound
-		return
-	}
-	for _, vd := range t {
-		tv = append(tv,
-			*media.NewVideo("", "", htmlquery.SelectAttr(vd, "href"), nil),
-		)
-	}
-	if len(tv) == 0 {
-		return nil, derrors.ErrNotFound
-	}
-
-	return tv, nil
-}
-
 func (i *IG) Download(ctx *dcontext.Context) (err error) {
 	ctx.Notifier().UpdTextNotify("‍🔍 searching media")
 
-	if i.token == "" || time.Now().Sub(i.lastTokenUpd) > time.Minute*5 {
-		err = i.getToken(ctx)
-		if err != nil {
-			return
-		}
-	} // if token is invalid or not updated in 5 minutes
-
 	u := ctx.GetUrl()
 
-	var buff bytes.Buffer
-	w := multipart.NewWriter(&buff)
-	w.WriteField("url", ctx.GetUrl().String())
-	w.WriteField("action", "post")
-	w.WriteField("token", i.token)
-	w.Close()
+	data := url.Values{}
+	data.Set("url", u.String())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://snapinst.app/action2.php", &buff)
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodPost,
+		"https://snapins.ai/action.php", bytes.NewReader([]byte(data.Encode())))
 	if err != nil {
 		return err
 	}
 
 	for k, v := range map[string]string{
 		"User-Agent":   UA,
-		"Content-Type": w.FormDataContentType(),
-		"Origin":       "https://snapinst.app",
-		"Referer":      "https://snapinst.app/",
+		"Content-Type": "application/x-www-form-urlencoded",
+		"Origin":       "https://snapins.ai",
+		"Referer":      "https://snapins.ai",
 	} {
 		req.Header.Add(k, v)
 	}
@@ -168,23 +87,26 @@ func (i *IG) Download(ctx *dcontext.Context) (err error) {
 		return
 	}
 
-	ttv, err := parseIgVideo(string(body))
+	var IGVid IGVIdeo
+	err = json.Unmarshal(body, &IGVid)
 	if err != nil {
 		return
 	}
 
-	//dr := dresult.NewDownloaderResult(ctx)
+	if len(IGVid.Data) == 0 {
+		return fmt.Errorf("no videos here")
+	}
 
 	var vids []media.Media
 
 	ctx.Notifier().UpdTextNotify("😵⏬ downloading media")
 	go ctx.Notifier().StartTicker(ctx)
-	for num, vid := range ttv {
+	for num, vid := range IGVid.Data {
 		if num >= 10 {
 			break
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, vid.URL, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, vid.VideoURL, nil)
 		if err != nil {
 			return err
 		}
@@ -205,9 +127,9 @@ func (i *IG) Download(ctx *dcontext.Context) (err error) {
 			FileSize:  float64(resp.ContentLength),
 		}
 
-		vn := md5.Sum([]byte(vid.URL))
+		vn := md5.Sum([]byte(vid.VideoURL))
 		vids = append(vids,
-			media.NewVideo(hex.EncodeToString(vn[:])+".mp4", u.String(), vid.URL, counting_reader.NewCountingReader(resp.Body, &cropts)),
+			media.NewVideo(hex.EncodeToString(vn[:])+".mp4", vid.Title, vid.VideoURL, counting_reader.NewCountingReader(resp.Body, &cropts)),
 		)
 	}
 

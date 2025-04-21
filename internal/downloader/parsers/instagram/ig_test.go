@@ -64,7 +64,7 @@ func TestIG_Download(t *testing.T) {
 				SizeLimit: 50 * 1024 * 1024,
 			},
 			args: args{
-				url: "https://www.instagram.com/share/BADbySdRK8",
+				url: "https://www.instagram.com/reel/DGV6_87i286/?igsh=MXc5dXhlaDBiYXhwZw==",
 				ctx: dcontext.NewDownloaderContext(context.Background(), &notitier{}),
 			},
 		},
@@ -72,7 +72,8 @@ func TestIG_Download(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tk := &IG{
-				Timeout: tt.fields.Timeout,
+				Timeout:   tt.fields.Timeout,
+				SizeLimit: int64(tt.fields.SizeLimit),
 
 				Client: proxiedHTTP.NewProxiedHTTPClient(os.Getenv("HTTPS_PROXY")),
 			}
