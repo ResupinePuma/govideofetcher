@@ -2,8 +2,9 @@ configs
 __debug_bin*
 *.yml
 !docker-compose.*
-*.mp4
-
+*.mp*
+*.db
+.vscode
 # Binaries for programs and plugins
 *.exe
 *.exe~
