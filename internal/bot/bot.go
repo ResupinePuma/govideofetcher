@@ -255,7 +255,12 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	media, err := m.d.Download(dctx, url)
 	if err != nil {
 		Logging.Errorf("err download video %s: %v", msg.Text, err)
-		n.UpdTextNotify(GetErrMsg(err))
+		n.Close()
+
+		_, err = m.bot.Send(tgbotapi.NewAnimation(msg.Chat.ID, tgbotapi.FileURL(RandomGif())))
+		if err != nil {
+			Logging.Errorf("err sending gif %s: %v", msg.Text, err)
+		}
 		return
 	}
 
