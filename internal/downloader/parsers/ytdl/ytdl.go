@@ -9,20 +9,19 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 	"videofetcher/internal/counting_reader"
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/media"
 	"videofetcher/internal/downloader/options"
-
-	v "videofetcher/internal/downloader/media"
+	ytdlpapi "videofetcher/internal/yt-dlp-api"
 )
 
 var (
@@ -149,29 +148,6 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 	lang := ctx.GetLang()
 	yt.Format = strings.ReplaceAll(yt.Format, "language={}", fmt.Sprintf("language^=%s", lang))
 
-	cmd := exec.CommandContext(
-		ctx,
-		YTDlPath,
-		"--no-call-home",
-		"--no-cache-dir",
-
-		"--proxy", yt.ProxyURL,
-		"--newline",
-		"--write-thumbnail", "--convert-thumbnails", "png",
-		"--buffer-size", "10M",
-		"-N", "8",
-		"--restrict-filenames",
-		"--write-info-json",
-		"-f", yt.Format, // скачиваем лучшее качество в формате mp4
-		"--max-filesize", "50M",
-	)
-
-	if yt.Headers != nil {
-		for k, v := range yt.Headers {
-			line := fmt.Sprintf("%s: %s", k, strings.Join(v, "; "))
-			cmd.Args = append(cmd.Args, "--add-header", line)
-		}
-	}
 	ext := ""
 	switch yt.mode {
 	case modeAudio:
@@ -180,138 +156,108 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 		ext = ".mp4"
 	}
 
-	filename := randomFileName(8)
-
-	if yt.FFmpeg != "" {
-		cmd.Args = append(cmd.Args, "-o", filename+ext)
-		cmd.Args = append(cmd.Args, "--exec", fmt.Sprintf("%s -i {} %s %s", "ffmpeg", yt.FFmpeg, "conv_"+filename+ext))
-		cmd.Args = append(cmd.Args, u.String())
-	} else {
-		cmd.Args = append(cmd.Args, u.String())
-		cmd.Args = append(cmd.Args, "-o", filename+ext)
+	args := ytdlpapi.BodyArgs{
+		URL:           u.String(),
+		ProxyURL:      yt.ProxyURL,
+		Format:        yt.Format,
+		FFMpeg:        yt.FFmpeg,
+		Headers:       yt.Headers,
+		Extension:     ext,
+		DownloadInfo:  true,
+		DownloadThumb: true,
+		BufferSize:    "10M",
+		MaxFilesize:   "50M",
 	}
 
-	cmd.Dir = tempPath
-	cmd.Stderr = log.Writer()
-	cmd.Stdout = log.Writer()
+	b, _ := json.Marshal(args)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://localhost:8080/convert", bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("BAD STATUS")
+	}
 
 	ctx.Notifier().UpdTextNotify("‍⏬ downloading media")
 	go ctx.Notifier().StartTicker(ctx)
 
-	Logging.Debugf("%v", cmd.Args)
-	if err = cmd.Start(); err != nil {
-		return
+	contentType := resp.Header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		log.Fatalf("ParseMediaType error: %v", err)
 	}
+	if mediaType != "multipart/form-data" && mediaType != "multipart/mixed" {
+		log.Fatalf("Expected multipart/*, got %s", mediaType)
+	}
+	boundary, ok := params["boundary"]
+	if !ok {
+		log.Fatalf("No boundary in Content-Type")
+	}
+
+	// создаём Reader для разбора body
+	mr := multipart.NewReader(resp.Body, boundary)
 
 	var info Info
 	var errch chan error = make(chan error)
+	var thumbnail io.Reader
 	var wg sync.WaitGroup
-
-	var size float64
+	var mreader io.ReadCloser
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// will be doanloadad before main video
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				time.Sleep(time.Second)
-				// open info file
-				infof, err := findFile(filepath.Join(tempPath, "*.info.json"))
-				if err != nil {
-					if errors.Is(err, ErrNotFound) {
-						continue
-					}
-					errch <- err
-					return
+			part, err := mr.NextPart()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
 				}
-				i, err := os.Open(infof)
-				if err != nil {
-					errch <- fmt.Errorf("err open info: %v", err)
-					return
-				}
-				err = json.NewDecoder(i).Decode(&info)
+				errch <- fmt.Errorf("err io error: %v", err)
+			}
+			switch part.FormName() {
+			case "info":
+				err = json.NewDecoder(part).Decode(&info)
 				if err != nil {
 					errch <- fmt.Errorf("err decode info: %v", err)
-					return
+					continue
 				}
-				i.Close()
+				part.Close()
 
-				size = max(info.Filesize, info.FilesizeApprox)
-				if size == 0 {
-					size = float64(randSize())
+			case "thumb":
+				b, err := io.ReadAll(part)
+				if err != nil {
+					errch <- fmt.Errorf("err decode thumb: %v", err)
+					continue
 				}
-				if size > float64(yt.SizeLimit) {
-					errch <- fmt.Errorf("size limit reached")
-					return
-				}
+				part.Close()
 
+				thumbnail = bytes.NewReader(b)
+			case "media":
+				mreader = part
 				return
 			}
 		}
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		err = cmd.Wait()
-		if err != nil {
-			errch <- err
-		}
-
-	}()
-
-	go func() {
-		wg.Wait()
-		close(errch)
-	}()
-
-	for e := range errch {
-		if e != nil {
-			return e
-		}
-	}
-
-	var thumbnail io.Reader
-	if info.Thumbnail != "" {
-		tbf, e := findFile(filepath.Join(tempPath, "*.png"))
-		if e == nil {
-			b, e := os.ReadFile(tbf)
-			if e == nil {
-				thumbnail = bytes.NewReader(b)
-			}
-		}
-	}
-
-	// open media file
-	ptrn := "*" + ext
-	if yt.FFmpeg != "" {
-		ptrn = "conv_" + ptrn
-	}
-
-	vidf, err := findFile(filepath.Join(tempPath, ptrn))
-	if err != nil {
-		return err
-	}
-	rdr, err := os.Open(vidf)
-	if err != nil {
-		return fmt.Errorf("err open result: %v", err)
-	}
+	wg.Wait()
 
 	cropts := cr.CountingReaderOpts{
 		ByteLimit: yt.SizeLimit,
-		FileSize:  float64(size),
+		FileSize:  float64(max(info.Filesize, info.FilesizeApprox)),
 	}
 
 	var m []media.Media
 	switch yt.mode {
 	case modeVideo:
-		m = append(m, &v.Video{
-			Reader:    counting_reader.NewCountingReader(rdr, &cropts),
+		m = append(m, &media.Video{
+			Reader:    counting_reader.NewCountingReader(mreader, &cropts),
 			Title:     info.Title,
 			Thumbnail: thumbnail,
 			URL:       u.String(),
@@ -320,8 +266,8 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 			Filename:  info.Title + ".mp4",
 		})
 	case modeAudio:
-		m = append(m, &v.Audio{
-			Reader:    counting_reader.NewCountingReader(rdr, &cropts),
+		m = append(m, &media.Audio{
+			Reader:    counting_reader.NewCountingReader(mreader, &cropts),
 			Title:     info.Title,
 			URL:       u.String(),
 			Thumbnail: thumbnail,

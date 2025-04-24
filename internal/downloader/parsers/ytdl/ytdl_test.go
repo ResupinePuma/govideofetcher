@@ -48,7 +48,7 @@ func TestYTdl_Download(t *testing.T) {
 				Timeout:   30,
 			},
 			args: args{
-				u:   "https://youtube.com/shorts/_XJLpu-LAUM",
+				u:   "https://youtube.com/shorts/69Hyj2tWVbc",
 				ctx: context.Background(),
 			},
 		},
@@ -59,6 +59,8 @@ func TestYTdl_Download(t *testing.T) {
 				SizeLimit: 50 * 1024 * 1024,
 				Timeout:   tt.fields.Timeout,
 				Format:    "18/17/bestvideo+worstaudio/(mp4)[ext=mp4][vcodec^=h26]/worst[width>=480][ext=mp4]/worst[ext=mp4]",
+				mode:      modeVideo,
+				ProxyURL:  "http://172.30.1.2:3128",
 			}
 			var err error
 			//var vid io.Reader

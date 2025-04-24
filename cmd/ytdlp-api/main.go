@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	ytdlpapi "videofetcher/internal/yt-dlp-api"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,22 +28,6 @@ var YTDlPath = "yt-dlp"
 
 // ErrNotFound is returned when no file matches the pattern
 var ErrNotFound = fmt.Errorf("file not found")
-
-type BodyArgs struct {
-	URL           string `json:"url,omitempty"`
-	Format        string `json:"format,omitempty"`
-	Extension     string `json:"extension,omitempty"`
-	MaxFilesize   string `json:"max_filesize,omitempty"`
-	ProxyURL      string `json:"proxy_url,omitempty"`
-	BufferSize    string `json:"buffer_size,omitempty"`
-	DownloadInfo  bool   `json:"write_info_json,omitempty"`
-	DownloadThumb bool   `json:"write_thumbnail,omitempty"`
-
-	FFMpeg  string      `json:"ffmpeg,omitempty"`
-	Headers http.Header `json:"headers,omitempty"`
-
-	maxsize int64
-}
 
 type Info struct {
 	Filesize       float64 `json:"filesize"`        // The number of bytes, if known in advance
@@ -172,7 +157,7 @@ func main() {
 		ctx, cancel := context.WithCancel(c.Request.Context())
 		defer cancel()
 
-		var args BodyArgs
+		var args ytdlpapi.BodyArgs
 		if err := c.BindJSON(&args); err != nil {
 			c.Error(err)
 			return
@@ -212,7 +197,7 @@ func main() {
 				c.Error(err)
 				return
 			}
-			args.maxsize = s
+			args.MaxSize = s
 			cmd.Args = append(cmd.Args, "--max-filesize", args.MaxFilesize)
 		}
 		if args.Headers != nil {
@@ -251,7 +236,6 @@ func main() {
 		var setupMultipart = func() {
 			multipartWriter = multipart.NewWriter(c.Writer)
 			c.Header("Content-Type", multipartWriter.FormDataContentType())
-			defer multipartWriter.Close() // закроется при возврате из хендлера
 		}
 
 		errorCh := make(chan error, 1)
@@ -288,7 +272,7 @@ func main() {
 
 					filesChan <- *res
 				}
-			}(args.maxsize)
+			}(args.MaxSize)
 		}
 
 		if args.DownloadThumb {
@@ -379,7 +363,7 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8081"
+		port = "8080"
 	}
 	srv := &http.Server{
 		Addr:           ":" + port,
