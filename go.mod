@@ -2,8 +2,6 @@ module videofetcher
 
 go 1.23.0
 
-toolchain go1.23.4
-
 require (
 	github.com/antchfx/htmlquery v1.3.1
 	github.com/dop251/goja v0.0.0-20240220182346-e401ed450204
@@ -47,5 +45,3 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-//replace github.com/go-telegram-bot-api/telegram-bot-api/v5 => ./internal/telegram-bot-api/

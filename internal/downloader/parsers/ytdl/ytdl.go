@@ -2,12 +2,12 @@ package ytdl
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 	"mime"
 	"mime/multipart"
@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"videofetcher/internal/counting_reader"
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
@@ -48,6 +47,8 @@ type YtDl struct {
 	Headers    http.Header
 
 	ProxyURL string
+
+	YTDLPApi string
 	mode     int
 }
 
@@ -72,6 +73,7 @@ func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 		SizeLimit: sizelim,
 		Headers:   http.Header{},
 		mode:      modeVideo,
+		YTDLPApi:  opts.APIAddr,
 	}
 
 	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
@@ -96,6 +98,7 @@ func NewParserAudio(sizelim int64, opts *options.YTDLOptions) *YtDl {
 		Headers:   http.Header{},
 		Format:    "bestaudio",
 		mode:      modeAudio,
+		YTDLPApi:  opts.APIAddr,
 	}
 
 	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
@@ -134,28 +137,134 @@ func randSize() int {
 	return int(r.Int64())
 }
 
-func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
+// extByMode возвращает расширение файла по режиму
+func extByMode(mode int) string {
+	switch mode {
+	case modeAudio:
+		return ".mp3"
+	case modeVideo:
+		return ".mp4"
+	default:
+		return ""
+	}
+}
 
+// postConvert сериализует args в JSON и шлёт POST-запрос
+func postConvert(ctx context.Context, url string, args ytdlpapi.BodyArgs) (*http.Response, error) {
+	body, err := json.Marshal(args)
+	if err != nil {
+		return nil, fmt.Errorf("json marshal args: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	return http.DefaultClient.Do(req)
+}
+
+// newMultipartReader создаёт multipart.Reader из ответа
+func newMultipartReader(resp *http.Response) (*multipart.Reader, error) {
+	ct := resp.Header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(ct)
+	if err != nil {
+		return nil, fmt.Errorf("parse media type: %w", err)
+	}
+	if !strings.HasPrefix(mediaType, "multipart/") {
+		return nil, fmt.Errorf("expected multipart/*, got %s", mediaType)
+	}
+	boundary, ok := params["boundary"]
+	if !ok {
+		return nil, fmt.Errorf("missing boundary in content-type")
+	}
+	return multipart.NewReader(resp.Body, boundary), nil
+}
+
+// parseParts читает части multipart и возвращает инфо, thumb и media.Part
+func parseParts(mr *multipart.Reader) (info Info, thumb io.Reader, mediaPart io.ReadCloser, err error) {
+	for {
+		part, errPart := mr.NextPart()
+		if errors.Is(errPart, io.EOF) {
+			break
+		}
+		if errPart != nil {
+			return info, nil, nil, fmt.Errorf("reading multipart: %w", errPart)
+		}
+
+		switch part.FormName() {
+		case "info":
+			if err := json.NewDecoder(part).Decode(&info); err != nil {
+				return info, nil, nil, fmt.Errorf("decoding info: %w", err)
+			}
+			part.Close()
+
+		case "thumb":
+			buf, err := io.ReadAll(part)
+			part.Close()
+			if err != nil {
+				return info, nil, nil, fmt.Errorf("reading thumb: %w", err)
+			}
+			thumb = bytes.NewReader(buf)
+
+		case "media":
+			return info, thumb, part, nil
+		default:
+			part.Close()
+		}
+	}
+	return info, thumb, nil, fmt.Errorf("no media part found")
+}
+
+// buildMediaSlice создаёт срез media.Media в зависимости от режима
+func buildMediaSlice(mode int, reader io.ReadCloser, opts *cr.CountingReaderOpts, info Info, thumb io.Reader, dir, url string) []media.Media {
+	crdr := counting_reader.NewCountingReader(reader, opts)
+	switch mode {
+	case modeVideo:
+		return []media.Media{
+			&media.Video{
+				Reader:    crdr,
+				Title:     info.Title,
+				Thumbnail: thumb,
+				URL:       url,
+				Dir:       dir,
+				Duration:  info.Duration,
+				Filename:  info.Title + ".mp4",
+			},
+		}
+	case modeAudio:
+		filename := fmt.Sprintf("%s-%s.mp3", info.Artist, info.Title)
+		return []media.Media{
+			&media.Audio{
+				Reader:    crdr,
+				Title:     info.Title,
+				Artist:    info.Artist,
+				Thumbnail: thumb,
+				URL:       url,
+				Dir:       dir,
+				Duration:  info.Duration,
+				Filename:  filename,
+			},
+		}
+	default:
+		return nil
+	}
+}
+
+func (yt *YtDl) Download(ctx *dcontext.Context) error {
 	defer close(ctx.Results())
 
+	// Подготовка
 	u := ctx.GetUrl()
-
-	tempPath, tempErr := os.MkdirTemp("", "ydls")
-	if tempErr != nil {
-		return tempErr
+	tempPath, err := os.MkdirTemp("", "ydls")
+	if err != nil {
+		return fmt.Errorf("creating temp dir: %w", err)
 	}
 
 	lang := ctx.GetLang()
 	yt.Format = strings.ReplaceAll(yt.Format, "language={}", fmt.Sprintf("language^=%s", lang))
 
-	ext := ""
-	switch yt.mode {
-	case modeAudio:
-		ext = ".mp3"
-	case modeVideo:
-		ext = ".mp4"
-	}
+	ext := extByMode(yt.mode)
 
+	// Формируем и отправляем запрос
 	args := ytdlpapi.BodyArgs{
 		URL:           u.String(),
 		ProxyURL:      yt.ProxyURL,
@@ -169,116 +278,37 @@ func (yt *YtDl) Download(ctx *dcontext.Context) (err error) {
 		MaxFilesize:   "50M",
 	}
 
-	b, _ := json.Marshal(args)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://localhost:8080/convert", bytes.NewReader(b))
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("BAD STATUS")
-	}
-
-	ctx.Notifier().UpdTextNotify("‍⏬ downloading media")
+	ctx.Notifier().UpdTextNotify("⏬ downloading media")
 	go ctx.Notifier().StartTicker(ctx)
 
-	contentType := resp.Header.Get("Content-Type")
-	mediaType, params, err := mime.ParseMediaType(contentType)
+	resp, err := postConvert(ctx, yt.YTDLPApi, args)
 	if err != nil {
-		log.Fatalf("ParseMediaType error: %v", err)
-	}
-	if mediaType != "multipart/form-data" && mediaType != "multipart/mixed" {
-		log.Fatalf("Expected multipart/*, got %s", mediaType)
-	}
-	boundary, ok := params["boundary"]
-	if !ok {
-		log.Fatalf("No boundary in Content-Type")
+		return err
 	}
 
-	// создаём Reader для разбора body
-	mr := multipart.NewReader(resp.Body, boundary)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status: %s", resp.Status)
+	}
 
-	var info Info
-	var errch chan error = make(chan error)
-	var thumbnail io.Reader
-	var wg sync.WaitGroup
-	var mreader io.ReadCloser
+	mr, err := newMultipartReader(resp)
+	if err != nil {
+		return err
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			part, err := mr.NextPart()
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				errch <- fmt.Errorf("err io error: %v", err)
-			}
-			switch part.FormName() {
-			case "info":
-				err = json.NewDecoder(part).Decode(&info)
-				if err != nil {
-					errch <- fmt.Errorf("err decode info: %v", err)
-					continue
-				}
-				part.Close()
+	info, thumb, mediaPart, err := parseParts(mr)
+	if err != nil {
+		return err
+	}
 
-			case "thumb":
-				b, err := io.ReadAll(part)
-				if err != nil {
-					errch <- fmt.Errorf("err decode thumb: %v", err)
-					continue
-				}
-				part.Close()
-
-				thumbnail = bytes.NewReader(b)
-			case "media":
-				mreader = part
-				return
-			}
-		}
-	}()
-
-	wg.Wait()
-
+	// Собираем результирующий media.Media
 	cropts := cr.CountingReaderOpts{
 		ByteLimit: yt.SizeLimit,
 		FileSize:  float64(max(info.Filesize, info.FilesizeApprox)),
 	}
 
-	var m []media.Media
-	switch yt.mode {
-	case modeVideo:
-		m = append(m, &media.Video{
-			Reader:    counting_reader.NewCountingReader(mreader, &cropts),
-			Title:     info.Title,
-			Thumbnail: thumbnail,
-			URL:       u.String(),
-			Dir:       tempPath,
-			Duration:  info.Duration,
-			Filename:  info.Title + ".mp4",
-		})
-	case modeAudio:
-		m = append(m, &media.Audio{
-			Reader:    counting_reader.NewCountingReader(mreader, &cropts),
-			Title:     info.Title,
-			URL:       u.String(),
-			Thumbnail: thumbnail,
-			Artist:    info.Artist,
-			Dir:       tempPath,
-			Duration:  info.Duration,
-			Filename:  strings.Join([]string{info.Artist, info.Title}, "-") + ".mp3",
-		})
-	}
-	ctx.AddResult(m)
+	result := buildMediaSlice(yt.mode, mediaPart, &cropts, info, thumb, tempPath, u.String())
 
+	ctx.AddResult(result)
 	return nil
 }
 

@@ -27,6 +27,7 @@ var cfg = Config{
 		YTDL: options.YTDLOptions{
 			Format:     "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
 			Executable: "yt-dlp",
+			APIAddr: "http://127.0.0.1/convert",
 		},
 	},
 }
