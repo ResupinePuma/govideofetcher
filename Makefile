@@ -12,17 +12,15 @@ push-bot:
 
 build-api:
 	docker buildx build \
-		--platform linux/amd64,linux/arm64 \
-		--push \
-		-t $(REGISTRY)/ytdlapi:latest \
-		-f docker/Dockerfile.ytdlapi .
+	    --platform linux/arm64,linux/amd64 \
+	    --push -t 192.168.1.2:5000/dlapi \
+	    -f docker/Dockerfile.ytdlapi .
 
 push-api:
-	docker push $(REGISTRY)/ytdlapi:latest
+	docker compose push api
 
 build: build-bot build-api
 
 push: push-bot push-api
-
 
 all: build

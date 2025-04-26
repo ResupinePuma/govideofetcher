@@ -7,9 +7,7 @@ services:
       -  ./configs:/govf/configs
     restart: always
 
-  ytdlpapi:
-    image: 192.168.1.2:5000/ytdlapi
+  api:
+    image: 192.168.1.2:5000/dlapi
     container_name: ytdlpapi
-    ports:
-      - 9123:8080
     restart: always

@@ -18,6 +18,7 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
         echo "Unsupported architecture: $TARGETARCH"; exit 1; \
     fi && \
     chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
+
 RUN case "${TARGETPLATFORM}" in \
     "linux/amd64")  GOARCH=amd64 ;; \
     "linux/arm64")  GOARCH=arm64 ;; \
@@ -28,21 +29,21 @@ RUN case "${TARGETPLATFORM}" in \
 
 FROM --platform=$BUILDPLATFORM python:3-alpine3.20 AS ytdlp-builder
 WORKDIR /root
-RUN apk add --no-cache wget binutils g++
-RUN wget https://github.com/yt-dlp/yt-dlp/archive/refs/tags/$(wget -qO- https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | grep '"tag_name"' | cut -d '"' -f 4).tar.gz && \
-    tar -xzvf *.tar.gz && \
-    cd yt-dlp-* && \
-    python3 devscripts/install_deps.py --include pyinstaller && \
-    python3 devscripts/make_lazy_extractors.py && \
-    python3 -m bundle.pyinstaller && \
-    cp dist/yt-dlp_linux* /root/yt-dlp
+RUN apk add --no-cache wget binutils build-base tar git py3-pip py3-setuptools py3-wheel
+RUN wget https://github.com/yt-dlp/yt-dlp/archive/refs/tags/$(wget -qO- https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | grep '"tag_name"' | cut -d '"' -f 4).tar.gz \
+    && tar -xzf *.tar.gz \
+    && cd yt-dlp-* \
+    && python3 -m pip install --upgrade pip \
+    && python3 devscripts/install_deps.py --include pyinstaller \
+    && python3 devscripts/make_lazy_extractors.py \
+    && python3 -m bundle.pyinstaller
 
 FROM --platform=$BUILDPLATFORM python:3-alpine3.20
 WORKDIR /ytdlpapi
 RUN [ "$TARGETARCH" = "arm64" ] && apk add --no-cache v4l-utils libv4l || true
+COPY --from=ytdlp-builder /root/yt-dlp-*/dist/yt-dlp_linux* /usr/local/bin/yt-dlp
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /ytdlpapi/build/ytdlpapi /ytdlpapi/ytdlpapi
-COPY --from=ytdlp-builder /root/yt-dlp /usr/local/bin/
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/
 COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/
 RUN chmod +x /usr/local/bin/*
