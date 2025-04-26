@@ -7,7 +7,8 @@ WORKDIR /ytdlpapi
 RUN apk add --no-cache curl ca-certificates build-base
 COPY ./internal /ytdlpapi/internal
 COPY ./cmd /ytdlpapi/cmd
-COPY ./go.* /ytdlpapi
+COPY ./go.mod /ytdlpapi
+COPY ./go.sum /ytdlpapi
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
         curl -L -o /usr/local/bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-x64 && \
         curl -L -o /usr/local/bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffprobe-linux-x64; \
