@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine3.20 AS builder
+FROM golang:1.24-alpine3.20 AS builder
 ARG TARGETPLATFORM
 ARG TARGETARCH
 ARG TARGETOS
@@ -12,13 +12,15 @@ COPY ./go.sum /ytdlpapi
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
         curl -L -o /usr/local/bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-x64 && \
         curl -L -o /usr/local/bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffprobe-linux-x64; \
+        curl -L -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/download/2025.03.31/yt-dlp_linux; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
         curl -L -o /usr/local/bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-arm64 && \
         curl -L -o /usr/local/bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffprobe-linux-arm64; \
+        curl -L -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/download/2025.03.31/yt-dlp_linux_aarch64; \
     else \
         echo "Unsupported architecture: $TARGETARCH"; exit 1; \
     fi && \
-    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
+    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/yt-dlp
 
 RUN case "${TARGETPLATFORM}" in \
     "linux/amd64")  GOARCH=amd64 ;; \
@@ -28,21 +30,9 @@ RUN case "${TARGETPLATFORM}" in \
     esac && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$GOARCH go build -o build/ytdlpapi -ldflags='-s -w -extldflags "-static"' cmd/ytdlp-api/main.go
 
-FROM --platform=$BUILDPLATFORM python:3-alpine3.20 AS ytdlp-builder
-WORKDIR /root
-RUN apk add --no-cache wget binutils build-base tar git py3-pip py3-setuptools py3-wheel
-RUN wget https://github.com/yt-dlp/yt-dlp/archive/refs/tags/$(wget -qO- https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | grep '"tag_name"' | cut -d '"' -f 4).tar.gz \
-    && tar -xzf *.tar.gz \
-    && cd yt-dlp-* \
-    && python3 -m pip install --upgrade pip \
-    && python3 devscripts/install_deps.py --include pyinstaller \
-    && python3 devscripts/make_lazy_extractors.py \
-    && python3 -m bundle.pyinstaller
-
-FROM --platform=$BUILDPLATFORM python:3-alpine3.20
+FROM ubuntu:latest
 WORKDIR /ytdlpapi
-RUN [ "$TARGETARCH" = "arm64" ] && apk add --no-cache v4l-utils libv4l || true
-COPY --from=ytdlp-builder /root/yt-dlp-*/dist/yt-dlp_linux* /usr/local/bin/yt-dlp
+COPY --from=builder /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /ytdlpapi/build/ytdlpapi /ytdlpapi/ytdlpapi
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/
