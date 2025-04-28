@@ -12,15 +12,13 @@ COPY ./go.sum /ytdlpapi
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
         curl -L -o /usr/local/bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-x64 && \
         curl -L -o /usr/local/bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffprobe-linux-x64; \
-        curl -L -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/download/2025.03.31/yt-dlp_linux; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
         curl -L -o /usr/local/bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-arm64 && \
         curl -L -o /usr/local/bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffprobe-linux-arm64; \
-        curl -L -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/download/2025.03.31/yt-dlp_linux_aarch64; \
     else \
         echo "Unsupported architecture: $TARGETARCH"; exit 1; \
     fi && \
-    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/yt-dlp
+    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
 
 RUN case "${TARGETPLATFORM}" in \
     "linux/amd64")  GOARCH=amd64 ;; \
@@ -30,13 +28,21 @@ RUN case "${TARGETPLATFORM}" in \
     esac && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$GOARCH go build -o build/ytdlpapi -ldflags='-s -w -extldflags "-static"' cmd/ytdlp-api/main.go
 
-FROM ubuntu:latest
+FROM python:3.12-alpine
+RUN apk add --no-cache build-base libcurl curl-dev \
+        zlib-dev brotli nghttp2-dev pkgconf git
+ENV PYCURL_SSL_LIBRARY=openssl
+
+RUN pip install --upgrade pip \
+    && pip install --compile --no-binary :all: pycurl yt-dlp
+
+RUN apk del build-base curl-dev zlib-dev nghttp2-dev pkgconf git \
+    && rm -rf /root/.cache /var/cache/apk/*
+
 WORKDIR /ytdlpapi
-COPY --from=builder /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
-COPY --from=builder /etc/ssl/certs /etc/ssl/certs
+
 COPY --from=builder /ytdlpapi/build/ytdlpapi /ytdlpapi/ytdlpapi
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/
 COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/
 RUN chmod +x /usr/local/bin/*
-
 ENTRYPOINT ["./ytdlpapi"]
