@@ -76,7 +76,7 @@ func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 		YTDLPApi:  opts.APIAddr,
 	}
 
-	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0")
 	yt.Headers.Add("Accept-Language", "en-US,en;q=0.5") // Set default language to English for the user
 
 	if opts != nil {
@@ -101,7 +101,7 @@ func NewParserAudio(sizelim int64, opts *options.YTDLOptions) *YtDl {
 		YTDLPApi:  opts.APIAddr,
 	}
 
-	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0")
 	yt.Headers.Add("Accept-Language", "en-US,en;q=0.5") // Set default language to English for the user
 
 	if opts != nil {
