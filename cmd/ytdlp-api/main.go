@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"io/fs"
 	"log"
@@ -65,13 +67,13 @@ func waitForFile(ctx context.Context, dir, pattern string, errorCh chan<- error)
 				if errors.Is(err, ErrNotFound) {
 					continue
 				}
-				errorCh <- err
+				//errorCh <- err
 				return nil
 			}
 
 			f, err := os.Open(path)
 			if err != nil {
-				errorCh <- fmt.Errorf("error opening file %s: %w", path, err)
+				//errorCh <- fmt.Errorf("error opening file %s: %w", path, err)
 				return nil
 			}
 			return &fileResult{filename: filepath.Base(path), file: f}
@@ -144,6 +146,28 @@ func randomFileName(length int) string {
 
 	return string(b)
 }
+func ToPng(imageBytes []byte) ([]byte, error) {
+	contentType := http.DetectContentType(imageBytes)
+
+	switch contentType {
+	case "image/png":
+	case "image/jpeg":
+		img, err := jpeg.Decode(bytes.NewReader(imageBytes))
+		if err != nil {
+			return nil, fmt.Errorf("unable to decode jpeg: %w", err)
+		}
+
+		buf := new(bytes.Buffer)
+		if err := png.Encode(buf, img); err != nil {
+			return nil, fmt.Errorf("unable to encode png: %w", err)
+		}
+
+		return buf.Bytes(), nil
+	}
+
+	return nil, fmt.Errorf("unable to convert %#v to png", contentType)
+}
+
 func main() {
 	r := gin.New()
 
@@ -175,18 +199,20 @@ func main() {
 		cmd := exec.CommandContext(ctx, YTDlPath,
 			"--no-call-home",
 			"--no-cache-dir",
-			"--abort-on-error",
+			"--ignore-errors",
+			"--no-abort-on-error",
 			"--proxy", args.ProxyURL,
 			"--newline",
 			"-N", "8",
 			"--restrict-filenames",
+			"--merge-output-format", strings.TrimPrefix(args.Extension, "."),
 			"-f", args.Format,
 		)
 		if args.BufferSize != "" {
 			cmd.Args = append(cmd.Args, "--buffer-size", args.BufferSize)
 		}
 		if args.DownloadThumb {
-			cmd.Args = append(cmd.Args, "--write-thumbnail", "--convert-thumbnails", "png")
+			cmd.Args = append(cmd.Args, "--write-thumbnail", "--convert-thumbnails", "jpg")
 		}
 		if args.DownloadInfo {
 			cmd.Args = append(cmd.Args, "--write-info-json")
@@ -279,9 +305,25 @@ func main() {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if res := waitForFile(ctx, tempDir, "*.png", errorCh); res != nil {
+				if res := waitForFile(ctx, tempDir, "*.jpg", errorCh); res != nil {
 					res.typeKey = "thumb"
-					filesChan <- *res
+
+					b, err := io.ReadAll(io.LimitReader(res.file, 10*1024*1024*1024))
+					if err != nil {
+						errorCh <- err
+						return
+					}
+					res.file.Close()
+
+					pngb, err := ToPng(b)
+					if err != nil {
+						errorCh <- err
+						return
+					}
+
+					r := io.NopCloser(bytes.NewReader(pngb))
+					fname := strings.TrimSuffix(res.filename, ".jpg")
+					filesChan <- fileResult{filename: fname + ".png", file: r}
 				}
 			}()
 		}
@@ -299,6 +341,10 @@ func main() {
 			for fil := range filesChan {
 				if multipartWriter == nil {
 					setupMultipart()
+				}
+
+				if fil.file == nil {
+					continue
 				}
 
 				writer, err := multipartWriter.CreateFormFile(fil.typeKey, fil.filename)
