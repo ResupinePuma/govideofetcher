@@ -234,6 +234,14 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 
 	m.vidCache[url.String()] = true
 
+	if strings.HasSuffix(url.Hostname(), "ru") || strings.Contains(url.Hostname(), "vk") {
+		m.SendMsg(&MsgPayload{
+			SourceMsg: &msg,
+			Text:      "❌service is not supported",
+		})
+		return
+	}
+
 	defer delete(m.vidCache, url.String())
 
 	n := notifier.NewMsgNotifier(m, msg.Chat.ID)
