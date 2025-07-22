@@ -76,13 +76,13 @@ func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 		YTDLPApi:  opts.APIAddr,
 	}
 
-	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0")
-	yt.Headers.Add("Accept-Language", "en-US,en;q=0.5") // Set default language to English for the user
+	//yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0")
+	//yt.Headers.Add("Accept-Language", "en-US,en;q=0.5") // Set default language to English for the user
 
 	if opts != nil {
 		yt.Format = opts.Format
 		yt.Executable = opts.Executable
-		yt.Headers = opts.Headers
+		//yt.Headers = opts.Headers
 		yt.FFmpeg = opts.FFmpeg
 		yt.ProxyURL = opts.Proxies
 	} else {
@@ -101,12 +101,12 @@ func NewParserAudio(sizelim int64, opts *options.YTDLOptions) *YtDl {
 		YTDLPApi:  opts.APIAddr,
 	}
 
-	yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0")
-	yt.Headers.Add("Accept-Language", "en-US,en;q=0.5") // Set default language to English for the user
+	//yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0")
+	//yt.Headers.Add("Accept-Language", "en-US,en;q=0.5") // Set default language to English for the user
 
 	if opts != nil {
 		yt.Executable = opts.Executable
-		yt.Headers = opts.Headers
+		//yt.Headers = opts.Headers
 		yt.ProxyURL = opts.Proxies
 	} else {
 		yt.Executable = "yt-dlp"
@@ -193,15 +193,16 @@ func parseParts(mr *multipart.Reader) (info Info, thumb io.Reader, mediaPart io.
 		switch part.FormName() {
 		case "info":
 			if err := json.NewDecoder(part).Decode(&info); err != nil {
+				part.Close()
 				return info, nil, nil, fmt.Errorf("decoding info: %w", err)
 			}
 			part.Close()
 
 		case "thumb":
 			buf, err := io.ReadAll(part)
-			part.Close()
 			if err != nil {
-				return info, nil, nil, fmt.Errorf("reading thumb: %w", err)
+				part.Close()
+				continue
 			}
 			thumb = bytes.NewReader(buf)
 
