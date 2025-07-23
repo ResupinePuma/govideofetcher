@@ -8,6 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/ncruces/go-sqlite3 v0.26.0
+	github.com/samber/lo v1.51.0
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v2 v2.4.0
 )

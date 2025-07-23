@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +13,7 @@ import (
 	"videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/media"
+	"videofetcher/internal/notice"
 )
 
 var (
@@ -78,7 +78,7 @@ func (i *IG) Download(ctx *dcontext.Context) (err error) {
 	}
 
 	if resp.StatusCode != 200 {
-		err = fmt.Errorf("bad status code: %v", resp.StatusCode)
+		err = notice.ErrInvalidResponse
 		return
 	}
 
@@ -94,12 +94,12 @@ func (i *IG) Download(ctx *dcontext.Context) (err error) {
 	}
 
 	if len(IGVid.Data) == 0 {
-		return fmt.Errorf("no videos here")
+		return notice.ErrNotFound
 	}
 
 	var vids []media.Media
 
-	ctx.Notifier().UpdTextNotify("😵⏬ downloading media")
+	ctx.Notifier().UpdTextNotify(notice.TranslateNotice(notice.NoticeDownloadingMedia, ctx.GetLang()))
 	go ctx.Notifier().StartTicker(ctx)
 	for num, vid := range IGVid.Data {
 		if num >= 10 {

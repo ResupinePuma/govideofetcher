@@ -3,39 +3,32 @@ package ytdl
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"videofetcher/internal/counting_reader"
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
 	"videofetcher/internal/downloader/media"
 	"videofetcher/internal/downloader/options"
+	"videofetcher/internal/notice"
 	ytdlpapi "videofetcher/internal/yt-dlp-api"
 )
 
 var (
-	YTDlPath = "yt-dlp"
-	Logging  Logger
+	Logging Logger
 )
 
 const (
 	modeVideo = 1
 	modeAudio = 2
-
-	mediaName = "res_media"
 )
-
-var Extractors map[string][]string
 
 type YtDl struct {
 	SizeLimit int64
@@ -52,23 +45,7 @@ type YtDl struct {
 	mode     int
 }
 
-func randomFileName(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, length)
-
-	_, err := io.ReadFull(rand.Reader, b)
-	if err != nil {
-		panic(err)
-	}
-
-	for i := range b {
-		b[i] = charset[int(b[i])%len(charset)]
-	}
-
-	return string(b)
-}
-
-func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
+func NewParser(sizelim int64, opts options.YTDLOptions) *YtDl {
 	yt := YtDl{
 		SizeLimit: sizelim,
 		Headers:   http.Header{},
@@ -79,7 +56,7 @@ func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 	//yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0")
 	//yt.Headers.Add("Accept-Language", "en-US,en;q=0.5") // Set default language to English for the user
 
-	if opts != nil {
+	if opts.IsSet() {
 		yt.Format = opts.Format
 		yt.Executable = opts.Executable
 		//yt.Headers = opts.Headers
@@ -92,7 +69,7 @@ func NewParser(sizelim int64, opts *options.YTDLOptions) *YtDl {
 	return &yt
 }
 
-func NewParserAudio(sizelim int64, opts *options.YTDLOptions) *YtDl {
+func NewParserAudio(sizelim int64, opts options.YTDLOptions) *YtDl {
 	yt := YtDl{
 		SizeLimit: sizelim,
 		Headers:   http.Header{},
@@ -104,7 +81,7 @@ func NewParserAudio(sizelim int64, opts *options.YTDLOptions) *YtDl {
 	//yt.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0")
 	//yt.Headers.Add("Accept-Language", "en-US,en;q=0.5") // Set default language to English for the user
 
-	if opts != nil {
+	if opts.IsSet() {
 		yt.Executable = opts.Executable
 		//yt.Headers = opts.Headers
 		yt.ProxyURL = opts.Proxies
@@ -112,29 +89,6 @@ func NewParserAudio(sizelim int64, opts *options.YTDLOptions) *YtDl {
 		yt.Executable = "yt-dlp"
 	}
 	return &yt
-}
-
-var ErrNotFound = fmt.Errorf("file not found")
-
-func findFile(pattern string) (string, error) {
-	// Поиск файлов по маске
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return "", err
-	}
-	// Если файл найден, возвращаем первый
-	if len(files) > 0 {
-		return files[0], nil
-	}
-	return "", ErrNotFound
-}
-
-func randSize() int {
-	min := 1 * 1 << 20
-	max := 3 * 1 << 20
-	r, _ := rand.Int(rand.Reader, big.NewInt(int64(max-min)))
-	r.Add(r, big.NewInt(int64(min)))
-	return int(r.Int64())
 }
 
 // extByMode возвращает расширение файла по режиму
@@ -209,7 +163,7 @@ func parseParts(mr *multipart.Reader) (info Info, thumb io.Reader, mediaPart io.
 		case "media":
 			return info, thumb, part, nil
 		default:
-			part.Close()
+			continue
 		}
 	}
 	return info, thumb, nil, fmt.Errorf("no media part found")
@@ -279,16 +233,16 @@ func (yt *YtDl) Download(ctx *dcontext.Context) error {
 		MaxFilesize:   "50M",
 	}
 
-	ctx.Notifier().UpdTextNotify("⏬ downloading media")
+	ctx.Notifier().UpdTextNotify(notice.TranslateNotice(notice.NoticeDownloadingMedia, ctx.GetLang()))
 	go ctx.Notifier().StartTicker(ctx)
 
 	resp, err := postConvert(ctx, yt.YTDLPApi, args)
 	if err != nil {
-		return err
+		return errors.Join(notice.ErrInvalidResponse, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status: %s", resp.Status)
+		return notice.ErrInvalidResponse
 	}
 
 	mr, err := newMultipartReader(resp)
@@ -301,7 +255,6 @@ func (yt *YtDl) Download(ctx *dcontext.Context) error {
 		return err
 	}
 
-	// Собираем результирующий media.Media
 	cropts := cr.CountingReaderOpts{
 		ByteLimit: yt.SizeLimit,
 		FileSize:  float64(max(info.Filesize, info.FilesizeApprox)),

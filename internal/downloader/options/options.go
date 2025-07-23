@@ -18,4 +18,25 @@ type YTDLOptions struct {
 	APIAddr    string `yaml:"api_addr"`
 	Proxies    string
 	Headers    http.Header
+
+	isSet bool
+}
+
+func (o *YTDLOptions) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	type t YTDLOptions
+	tmp := t{
+		isSet: true,
+	}
+
+	err := unmarshal(&tmp)
+	if err != nil {
+		return err
+	}
+
+	*o = YTDLOptions(tmp)
+	return nil
+}
+
+func (o *YTDLOptions) IsSet() bool {
+	return o.isSet
 }

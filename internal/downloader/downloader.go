@@ -48,8 +48,8 @@ func NewDownloader(opts options.DownloaderOpts) *Downloader {
 	d.parsers = map[string]AbstractDownloader{
 		ParserTikTok:  tiktok.NewParser(d.sizelimit, c),
 		ParserIG:      instagram.NewParser(d.sizelimit, c),
-		ParserYTMusic: ytdl.NewParserAudio(d.sizelimit, &opts.YTDL),
-		ParserDefault: ytdl.NewParser(d.sizelimit, &opts.YTDL),
+		ParserYTMusic: ytdl.NewParserAudio(d.sizelimit, opts.YTDL),
+		ParserDefault: ytdl.NewParser(d.sizelimit, opts.YTDL),
 		//ParserReddit:  reddit.NewParser(d.sizelimit, &opts.Reddit, &opts.YTDL),
 	}
 	return d
@@ -65,7 +65,7 @@ func (d *Downloader) Download(ctx *dcontext.Context, u *url.URL) (res []media.Me
 	switch u.Hostname() {
 	case "www.tiktok.com", "tiktok.com", "vt.tiktok.com":
 		dwn = d.parsers[ParserTikTok]
-	case "music.youtube.com","soundcloud.com":
+	case "music.youtube.com", "soundcloud.com":
 		dwn = d.parsers[ParserYTMusic]
 	case "instagram.com", "www.instagram.com":
 		dwn = d.parsers[ParserIG]

@@ -16,6 +16,7 @@ import (
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
 	v "videofetcher/internal/downloader/media"
+	"videofetcher/internal/notice"
 )
 
 var (
@@ -92,7 +93,7 @@ func (tt *TikTok) getToken(ctx context.Context) error {
 	}
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("bad status code: %v", resp.StatusCode)
+		return notice.ErrInvalidResponse
 	}
 
 	page, err := io.ReadAll(resp.Body)
@@ -130,7 +131,7 @@ func (tt *TikTok) getJsData(ctx context.Context, u string, headers map[string]st
 	}
 
 	if resp.StatusCode != 200 {
-		err = fmt.Errorf("bad status code: %v", resp.StatusCode)
+		err = notice.ErrInvalidResponse
 		return
 	}
 
@@ -176,7 +177,7 @@ func (tt *TikTok) Download(ctx *dcontext.Context) (err error) {
 	vi := vm.Get("def")
 	ta := aaaa.FindStringSubmatch(vi.String())
 	if len(ta) < 2 {
-		err = fmt.Errorf("media not found")
+		err = notice.ErrNotFound
 		return
 	}
 
@@ -187,7 +188,7 @@ func (tt *TikTok) Download(ctx *dcontext.Context) (err error) {
 
 	//dr := dresult.NewDownloaderResult(ctx)
 
-	ctx.Notifier().UpdTextNotify("‍⏬ downloading media")
+	ctx.Notifier().UpdTextNotify(notice.TranslateNotice(notice.NoticeDownloadingMedia, ctx.GetLang()))
 	go ctx.Notifier().StartTicker(ctx)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tv.URL, nil)

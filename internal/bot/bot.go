@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -16,6 +15,7 @@ import (
 	"videofetcher/internal/downloader/parsers/instagram"
 	"videofetcher/internal/downloader/parsers/tiktok"
 	"videofetcher/internal/downloader/parsers/ytdl"
+	"videofetcher/internal/notice"
 	"videofetcher/internal/notifier"
 	"videofetcher/internal/userdb"
 
@@ -23,8 +23,7 @@ import (
 )
 
 var (
-	Logging       Logger
-	ErrInvalidUrl = errors.New("Invalid url")
+	Logging Logger
 )
 
 const (
@@ -183,22 +182,22 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg tgbotapi.Message, err e
 	rmsg, err = m.Send(msg)
 	if err != nil {
 		Logging.Errorf("err sending a message: %v", err)
-		_, e := m.SendMsg(&MsgPayload{Text: GetErrMsg(err), SourceMsg: payload.SourceMsg})
-		if e != nil {
-			return rmsg, e
-		}
+		m.SendMsg(&MsgPayload{
+			SourceMsg: payload.SourceMsg,
+			Text:      notice.TranslateError(notice.ErrUnexpectedError, payload.SourceMsg.From.LanguageCode),
+		})
 	}
 	Logging.Infof("msg successfully sent to: %v", payload.SourceMsg.Chat.ID)
 	return
 }
 
-func usage(cmd string) string {
+func usage(cmd string, lang string) string {
 	cmd = strings.TrimPrefix(cmd, "/")
 	lines := map[string]string{
-		"get": "<URL> <caption (optional)> - Downloаd video from URL",
+		"get": notice.TranslateNotice(notice.NoticeUsageGet, lang),
 	}
 	if _, ok := lines[cmd]; !ok {
-		return "Command not exist"
+		return notice.TranslateNotice(notice.NoticeUsageNotFound, lang)
 	}
 
 	return fmt.Sprintf("/%s %s", cmd, lines[cmd])
@@ -208,12 +207,12 @@ func extractUrlAndText(str string) (addr *url.URL, label string, err error) {
 	re := regexp.MustCompile(`(?m)(https?:\/\/[^\s]+)`)
 	ustr := re.FindString(str)
 	if ustr == "" {
-		err = errors.New("invalid url")
+		err = notice.ErrInvalidURL
 		return
 	}
 	addr, errp := url.ParseRequestURI(ustr)
 	if errp != nil {
-		err = errors.New("invalid url")
+		err = notice.ErrInvalidURL
 		return
 	}
 	label = strings.TrimSpace(strings.Replace(str, addr.String(), "", -1))
@@ -237,7 +236,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	if strings.HasSuffix(url.Hostname(), "ru") || strings.Contains(url.Hostname(), "vk") {
 		m.SendMsg(&MsgPayload{
 			SourceMsg: &msg,
-			Text:      "❌service is not supported",
+			Text:      notice.TranslateError(notice.ErrUnsupportedService, msg.From.LanguageCode),
 		})
 		return
 	}
@@ -248,7 +247,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 
 	m.d.SetNotifier(n)
 
-	n.SendNotify("Got link. 👀 at 📼")
+	n.SendNotify(notice.TranslateNotice(notice.NoticeGotLink, msg.From.LanguageCode))
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(m.Options.Timeout)*time.Second)
 	defer cancel()
@@ -265,7 +264,10 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 		Logging.Errorf("err download video %s: %v", msg.Text, err)
 		n.Close()
 
-		_, err = m.bot.Send(tgbotapi.NewAnimation(msg.Chat.ID, tgbotapi.FileURL(RandomGif())))
+		anima := tgbotapi.NewAnimation(msg.Chat.ID, tgbotapi.FileURL(RandomGif()))
+		anima.Caption = notice.TranslateError(err, msg.From.LanguageCode)
+
+		_, err = m.bot.Send(anima)
 		if err != nil {
 			Logging.Errorf("err sending gif %s: %v", msg.Text, err)
 		}
@@ -273,7 +275,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	}
 
 	if len(media) > 1 {
-		n.UpdTextNotify(fmt.Sprintf("📣 I found %v media. Start sending", len(media)))
+		n.UpdTextNotify(fmt.Sprintf(notice.TranslateNotice(notice.NoticeMediaFound, msg.From.LanguageCode), len(media)))
 	}
 
 	m.SendMsg(&MsgPayload{
@@ -284,7 +286,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 		SourceMsg:   &msg,
 	})
 
-	n.UpdTextNotify("Done! ✅")
+	n.UpdTextNotify(notice.TranslateNotice(notice.NoticeDone, msg.From.LanguageCode))
 	cancel()
 	time.Sleep(time.Duration(2 * time.Second))
 
@@ -305,7 +307,7 @@ func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
 				if text == "" {
 					sent, e := m.SendMsg(&MsgPayload{
 						Type:      TypeMedia,
-						Text:      usage(msg.Command()),
+						Text:      usage(msg.Command(), msg.From.LanguageCode),
 						SourceMsg: &msg,
 					})
 					if e != nil {
