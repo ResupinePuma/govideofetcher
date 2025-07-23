@@ -110,22 +110,3 @@ func (m *MsgNotifier) Close() (err error) {
 	}
 	return
 }
-
-// func (m *MsgNotifier) DrawKeyboard(params []string) (err error) {
-// 	btns := []tgbotapi.InlineKeyboardButton{}
-// 	for i, p := range params {
-// 		btns = append(btns, tgbotapi.NewInlineKeyboardButtonData(p, strconv.Itoa(i)))
-// 	}
-// 	mrkup := tgbotapi.NewInlineKeyboardMarkup(btns)
-// 	msg := tgbotapi.NewEditMessageTextAndMarkup(
-// 		m.ChatID,
-// 		m.MsgID,
-// 		"Select preffered quality:",
-// 		mrkup,
-// 	)
-// 	_, err = m.Bot.Send(msg)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return
-// }
