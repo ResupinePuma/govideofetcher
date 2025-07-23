@@ -11,10 +11,16 @@ import (
 
 var ErrCfg = errors.New("error reading config.yml")
 
+type Telemetry struct {
+	ServiceName string `yaml:"service_name"`
+	Address     string `yaml:"address"`
+}
+
 type Config struct {
-	Token                  string `yaml:"tg_token"`
-	AdminId                int64  `yaml:"admin_id"`
-	Debug                  bool   `yaml:"debug"`
+	Token                  string    `yaml:"tg_token"`
+	AdminId                int64     `yaml:"admin_id"`
+	Debug                  bool      `yaml:"debug"`
+	Telemetry              Telemetry `yaml:"telemetry"`
 	options.DownloaderOpts `yaml:"downloader"`
 }
 
@@ -27,7 +33,7 @@ var cfg = Config{
 		YTDL: options.YTDLOptions{
 			Format:     "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]",
 			Executable: "yt-dlp",
-			APIAddr: "http://127.0.0.1/convert",
+			APIAddr:    "http://127.0.0.1/convert",
 		},
 	},
 }

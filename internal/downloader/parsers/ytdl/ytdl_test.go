@@ -13,11 +13,11 @@ import (
 
 type logg struct{}
 
-func (l *logg) Debugf(format string, v ...interface{}) { log.Printf(format, v...) }
-func (l *logg) Errorf(format string, v ...interface{}) { log.Printf(format, v...) }
-func (l *logg) Warnf(format string, v ...interface{})  { log.Printf(format, v...) }
-func (l *logg) Infof(format string, v ...interface{})  { log.Printf(format, v...) }
-func (l *logg) Print(v ...interface{})                 { log.Print(v...) }
+func (l *logg) Debugf(ctx context.Context, format string, v ...interface{}) { log.Printf(format, v...) }
+func (l *logg) Errorf(ctx context.Context, format string, v ...interface{}) { log.Printf(format, v...) }
+func (l *logg) Warnf(ctx context.Context, format string, v ...interface{})  { log.Printf(format, v...) }
+func (l *logg) Infof(ctx context.Context, format string, v ...interface{})  { log.Printf(format, v...) }
+func (l *logg) Print(v ...interface{})                                      { log.Print(v...) }
 
 type notitier struct{}
 

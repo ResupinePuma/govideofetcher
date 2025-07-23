@@ -60,6 +60,8 @@ func (d *Downloader) SetNotifier(n AbstractNotifier) {
 }
 
 func (d *Downloader) Download(ctx *dcontext.Context, u *url.URL) (res []media.Media, err error) {
+	ctx, span := dcontext.NewTracerContext(ctx, "download")
+	defer span.End()
 
 	var dwn AbstractDownloader
 	switch u.Hostname() {

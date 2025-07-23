@@ -145,6 +145,9 @@ func (tt *TikTok) getJsData(ctx context.Context, u string, headers map[string]st
 }
 
 func (tt *TikTok) Download(ctx *dcontext.Context) (err error) {
+	ctx, span := dcontext.NewTracerContext(ctx, "tiktok")
+	defer span.End()
+
 	if tt.token == "" || time.Now().Sub(tt.lastTokenUpd) > time.Minute*5 {
 		err = tt.getToken(ctx)
 		if err != nil {

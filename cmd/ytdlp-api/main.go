@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"image/jpeg"
 	"image/png"
@@ -21,9 +22,20 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"videofetcher/internal/telemetry"
 	ytdlpapi "videofetcher/internal/yt-dlp-api"
 
+	ginzap "github.com/gin-contrib/zap"
+
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 )
 
 var YTDlPath = "yt-dlp"
@@ -54,8 +66,12 @@ func findFile(pattern string) (string, error) {
 	return "", ErrNotFound
 }
 
+func init() {
+	otel.SetTextMapPropagator(propagation.TraceContext{}) // можно также использовать composite
+}
+
 // waitForFile polls until a file matching pattern appears or context is done
-func waitForFile(ctx context.Context, dir, pattern string, errorCh chan<- error) *fileResult {
+func waitForFile(ctx context.Context, dir, pattern string) *fileResult {
 	for {
 		select {
 		case <-ctx.Done():
@@ -67,13 +83,11 @@ func waitForFile(ctx context.Context, dir, pattern string, errorCh chan<- error)
 				if errors.Is(err, ErrNotFound) {
 					continue
 				}
-				//errorCh <- err
 				return nil
 			}
 
 			f, err := os.Open(path)
 			if err != nil {
-				//errorCh <- fmt.Errorf("error opening file %s: %w", path, err)
 				return nil
 			}
 			return &fileResult{filename: filepath.Base(path), file: f}
@@ -171,7 +185,62 @@ func ToPng(imageBytes []byte) ([]byte, error) {
 func main() {
 	r := gin.New()
 
-	r.Use(gin.Logger(), errorMiddleware())
+	serviceName := flag.String("serviceName", "", "name of service for telemetry")
+	address := flag.String("otelAddress", "", "address of telemetry server")
+	flag.Parse()
+
+	telemetry.ServiceName = *serviceName
+	telemetry.TracerEndpoint = *address
+
+	ctx := context.Background()
+	telemetry.InitTracer(ctx)
+
+	meter := telemetry.InitMeter()
+
+	requestDuration, err := meter.Float64Histogram(
+		"http.server.duration",
+		metric.WithDescription("duration of HTTP requests in seconds"),
+	)
+	if err != nil {
+		log.Fatalf("failed to create histogram: %v", err)
+	}
+
+	zapCFG := zap.NewProductionConfig()
+	zapCFG.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	zapCFG.DisableCaller = true
+	zapCFG.Encoding = "json"
+	logger, _ := zapCFG.Build()
+
+	sugar := logger.Sugar()
+	defer logger.Sync() // Flushes buffer, if any
+
+	r.Use(otelgin.Middleware(telemetry.ServiceName,
+		otelgin.WithGinMetricAttributeFn(func(c *gin.Context) []attribute.KeyValue {
+			start := time.Now()
+			c.Next()
+			duration := time.Since(start).Seconds()
+
+			attrs := []attribute.KeyValue{
+				semconv.HTTPMethodKey.String(c.Request.Method),
+				semconv.HTTPTargetKey.String(c.Request.URL.Path),
+				semconv.HTTPStatusCodeKey.Int(c.Writer.Status()),
+			}
+			// Сохраняем кастомную метрику
+			requestDuration.Record(c.Request.Context(), duration)
+
+			return attrs
+		}),
+	), func(c *gin.Context) {
+		// Извлекаем trace ID и кладём в gin.Context
+		span := trace.SpanFromContext(c.Request.Context())
+		traceID := span.SpanContext().TraceID().String()
+		c.Set("trace_id", traceID)
+
+		// Продолжаем цепочку
+		c.Next()
+	})
+
+	r.Use(ginzap.Ginzap(logger, time.RFC3339, true), errorMiddleware())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.Status(http.StatusOK)
@@ -186,6 +255,8 @@ func main() {
 			c.Error(err)
 			return
 		}
+
+		sugar.Infow("got message", "params", args, "trace_id", c.GetString("trace_id"))
 
 		filename := randomFileName(8)
 
@@ -250,10 +321,23 @@ func main() {
 		defer os.RemoveAll(tempDir)
 
 		cmd.Dir = tempDir
-		cmd.Stderr = log.Writer()
-		cmd.Stdout = log.Writer()
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			c.Error(err)
+			return
+		}
+
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			c.Error(err)
+			return
+		}
+
+		go streamLogs(stdout, c.GetString("trace_id"), logger)
+		go streamLogs(stderr, c.GetString("trace_id"), logger)
 
 		if err := cmd.Start(); err != nil {
+			sugar.Errorw("got error", "error", err, "trace_id", c.GetString("trace_id"))
 			c.Error(err)
 			return
 		}
@@ -273,7 +357,7 @@ func main() {
 			go func(msize int64) {
 				var info Info
 				defer wg.Done()
-				if res := waitForFile(ctx, tempDir, "*.info.json", errorCh); res != nil {
+				if res := waitForFile(ctx, tempDir, "*.info.json"); res != nil {
 					res.typeKey = "info"
 					b, err := io.ReadAll(res.file)
 					if err != nil {
@@ -305,7 +389,7 @@ func main() {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if res := waitForFile(ctx, tempDir, "*.jpg", errorCh); res != nil {
+				if res := waitForFile(ctx, tempDir, "*.jpg"); res != nil {
 					res.typeKey = "thumb"
 
 					b, err := io.ReadAll(io.LimitReader(res.file, 10*1024*1024*1024))
@@ -366,7 +450,7 @@ func main() {
 		defer wg.Done()
 
 		if err := cmd.Wait(); err != nil {
-			c.Error(err)
+			sugar.Errorw("got error", "error", err, "trace_id", c.GetString("trace_id"))
 			return
 		}
 
@@ -419,6 +503,6 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	log.Printf("Fast YTDLP API listening on port %s", port)
+	sugar.Infof("fast YTDLP API listening on port %s", port)
 	srv.ListenAndServe()
 }

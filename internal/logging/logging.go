@@ -1,9 +1,11 @@
 package logging
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"videofetcher/internal/telemetry"
 
 	"github.com/samber/lo"
 	"go.uber.org/zap"
@@ -57,17 +59,55 @@ func (l *Logger) Print(v ...interface{}) {
 	l.SugaredLogger.Info(v...)
 }
 
-func (l *Logger) Errorf(format string, v ...any) {
-	l.SugaredLogger.Errorf(format, v...)
+func (l *Logger) Errorf(ctx context.Context, format string, v ...any) {
+	id := telemetry.TraceID(ctx)
+	if id != "none" {
+		l.SugaredLogger.Errorw(fmt.Sprintf(format, v...), "trace_id", telemetry.TraceID(ctx))
+	} else {
+		l.SugaredLogger.Errorf(format, v...)
+	}
 }
-func (l *Logger) Warnf(format string, v ...any) {
-	l.SugaredLogger.Warnf(format, v...)
+func (l *Logger) Errorw(ctx context.Context, msg string, keysAndValues ...any) {
+	id := telemetry.TraceID(ctx)
+	if id != "none" {
+		keysAndValues = append(keysAndValues, "trace_id", telemetry.TraceID(ctx))
+		l.SugaredLogger.Errorw(msg, keysAndValues...)
+	} else {
+		l.SugaredLogger.Errorw(msg, keysAndValues...)
+	}
 }
-func (l *Logger) Infof(format string, v ...any) {
-	l.SugaredLogger.Infof(format, v...)
+func (l *Logger) Warnf(ctx context.Context, format string, v ...any) {
+	id := telemetry.TraceID(ctx)
+	if id != "none" {
+		l.SugaredLogger.Warnw(fmt.Sprintf(format, v...), "trace_id", telemetry.TraceID(ctx))
+	} else {
+		l.SugaredLogger.Warnf(format, v...)
+	}
 }
-func (l *Logger) Debugf(format string, v ...any) {
-	l.SugaredLogger.Debugf(format, v...)
+func (l *Logger) Infof(ctx context.Context, format string, v ...any) {
+	id := telemetry.TraceID(ctx)
+	if id != "none" {
+		l.SugaredLogger.Infow(fmt.Sprintf(format, v...), "trace_id", telemetry.TraceID(ctx))
+	} else {
+		l.SugaredLogger.Infof(format, v...)
+	}
+}
+func (l *Logger) Infow(ctx context.Context, msg string, keysAndValues ...any) {
+	id := telemetry.TraceID(ctx)
+	if id != "none" {
+		keysAndValues = append(keysAndValues, "trace_id", telemetry.TraceID(ctx))
+		l.SugaredLogger.Infow(msg, keysAndValues...)
+	} else {
+		l.SugaredLogger.Infow(msg, keysAndValues...)
+	}
+}
+func (l *Logger) Debugf(ctx context.Context, format string, v ...any) {
+	id := telemetry.TraceID(ctx)
+	if id != "none" {
+		l.SugaredLogger.Debugw(fmt.Sprintf(format, v...), "trace_id", telemetry.TraceID(ctx))
+	} else {
+		l.SugaredLogger.Debugf(format, v...)
+	}
 }
 
 func (l *Logger) Fatalf(format string, v ...any) {}

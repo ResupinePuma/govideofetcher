@@ -49,6 +49,9 @@ func NewParser(sizelim int64, c http.Client) *IG {
 }
 
 func (i *IG) Download(ctx *dcontext.Context) (err error) {
+	ctx, span := dcontext.NewTracerContext(ctx, "instagram")
+	defer span.End()
+
 	ctx.Notifier().UpdTextNotify("‍🔍 searching media")
 
 	u := ctx.GetUrl()

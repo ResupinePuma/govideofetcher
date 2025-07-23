@@ -26,7 +26,7 @@ RUN case "${TARGETPLATFORM}" in \
     "linux/arm/v7") GOARCH=arm  ;; \
     *) echo "Unsupported platform: ${TARGETPLATFORM}" && exit 1 ;; \
     esac && \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$GOARCH go build -o build/ytdlpapi -ldflags='-s -w -extldflags "-static"' cmd/ytdlp-api/main.go
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$GOARCH go build -o build/ytdlpapi -ldflags='-s -w -extldflags "-static"' cmd/ytdlp-api/main.go cmd/ytdlp-api/ytlogger.go
 
 FROM python:3.12-alpine
 RUN apk add --no-cache build-base libcurl curl-dev \

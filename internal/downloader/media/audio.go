@@ -6,14 +6,14 @@ import (
 )
 
 type Audio struct {
-	Title     string
-	URL       string
-	Dir       string
-	Thumbnail io.Reader
-	Duration  float64
-	Artist    string
-	Filename  string
-	Reader    io.ReadCloser
+	Title     string        `json:"title,omitempty"`
+	URL       string        `json:"url,omitempty"`
+	Dir       string        `json:"dir,omitempty"`
+	Thumbnail io.Reader     `json:"thumbnail,omitempty"`
+	Duration  float64       `json:"duration,omitempty"`
+	Artist    string        `json:"artist,omitempty"`
+	Filename  string        `json:"filename,omitempty"`
+	Reader    io.ReadCloser `json:"-"`
 }
 
 func NewAudio(fielname, title, url string, r io.ReadCloser) *Audio {

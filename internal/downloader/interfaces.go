@@ -17,8 +17,8 @@ type AbstractNotifier interface {
 }
 
 type iLogger interface {
-	Errorf(format string, v ...any)
-	Warnf(format string, v ...any)
-	Infof(format string, v ...any)
-	Debugf(format string, v ...any)
+	Errorf(ctx context.Context, format string, v ...any)
+	Warnf(ctx context.Context, format string, v ...any)
+	Infof(ctx context.Context, format string, v ...any)
+	Debugf(ctx context.Context, format string, v ...any)
 }

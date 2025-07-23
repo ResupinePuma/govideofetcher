@@ -6,14 +6,14 @@ import (
 )
 
 type Video struct {
-	Title     string
-	Thumbnail io.Reader
-	URL       string
-	Dir       string
-	Duration  float64
-	Reader    io.ReadCloser
+	Title     string        `json:"title,omitempty"`
+	Thumbnail io.Reader     `json:"thumbnail,omitempty"`
+	URL       string        `json:"url,omitempty"`
+	Dir       string        `json:"dir,omitempty"`
+	Duration  float64       `json:"duration,omitempty"`
+	Reader    io.ReadCloser `json:"-"`
 
-	Filename string
+	Filename string `json:"filename,omitempty"`
 }
 
 func NewVideo(filename, title, url string, r io.ReadCloser) *Video {

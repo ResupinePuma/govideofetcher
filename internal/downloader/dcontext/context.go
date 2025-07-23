@@ -4,6 +4,10 @@ import (
 	"context"
 	"net/url"
 	"videofetcher/internal/downloader/media"
+	"videofetcher/internal/telemetry"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type IDownloader interface {
@@ -34,6 +38,19 @@ func NewDownloaderContext(ctx context.Context, notifier iNotifier) *Context {
 		n:       notifier,
 		results: make(chan []media.Media),
 	}
+}
+
+func NewTracerContext(ctx *Context, name string) (*Context, trace.Span) {
+	tracer := otel.Tracer(telemetry.ServiceName)
+	tctx, span := tracer.Start(ctx.Context, name)
+	nctx := Context{
+		Context: tctx,
+		n:       ctx.n,
+		u:       ctx.u,
+		lang:    ctx.lang,
+		results: ctx.results,
+	}
+	return &nctx, span
 }
 
 func (c *Context) GetUrl() *url.URL {

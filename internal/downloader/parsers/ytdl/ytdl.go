@@ -18,7 +18,11 @@ import (
 	"videofetcher/internal/downloader/media"
 	"videofetcher/internal/downloader/options"
 	"videofetcher/internal/notice"
+	"videofetcher/internal/telemetry"
 	ytdlpapi "videofetcher/internal/yt-dlp-api"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var (
@@ -105,6 +109,10 @@ func extByMode(mode int) string {
 
 // postConvert сериализует args в JSON и шлёт POST-запрос
 func postConvert(ctx context.Context, url string, args ytdlpapi.BodyArgs) (*http.Response, error) {
+	tracer := otel.Tracer(telemetry.ServiceName)
+	ctx, span := tracer.Start(ctx, "yt-dlp request")
+	defer span.End()
+
 	body, err := json.Marshal(args)
 	if err != nil {
 		return nil, fmt.Errorf("json marshal args: %w", err)
@@ -113,6 +121,8 @@ func postConvert(ctx context.Context, url string, args ytdlpapi.BodyArgs) (*http
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+
 	return http.DefaultClient.Do(req)
 }
 
@@ -205,6 +215,9 @@ func buildMediaSlice(mode int, reader io.ReadCloser, opts *cr.CountingReaderOpts
 }
 
 func (yt *YtDl) Download(ctx *dcontext.Context) error {
+	ctx, span := dcontext.NewTracerContext(ctx, "yt-dlp prepare")
+	defer span.End()
+
 	defer close(ctx.Results())
 
 	// Подготовка
@@ -236,7 +249,7 @@ func (yt *YtDl) Download(ctx *dcontext.Context) error {
 	ctx.Notifier().UpdTextNotify(notice.TranslateNotice(notice.NoticeDownloadingMedia, ctx.GetLang()))
 	go ctx.Notifier().StartTicker(ctx)
 
-	resp, err := postConvert(ctx, yt.YTDLPApi, args)
+	resp, err := postConvert(ctx.Context, yt.YTDLPApi, args)
 	if err != nil {
 		return errors.Join(notice.ErrInvalidResponse, err)
 	}

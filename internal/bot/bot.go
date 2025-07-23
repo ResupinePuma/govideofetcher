@@ -17,7 +17,6 @@ import (
 	"videofetcher/internal/downloader/parsers/ytdl"
 	"videofetcher/internal/notice"
 	"videofetcher/internal/notifier"
-	"videofetcher/internal/userdb"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -35,7 +34,6 @@ const (
 
 type TelegramBot struct {
 	Options options.DownloaderOpts
-	Userdb  *userdb.UserDB
 
 	vidCache map[string]bool
 	fdbcache map[int64]time.Time
@@ -93,7 +91,7 @@ func utf16Len(s string) int {
 	return len(utf16.Encode([]rune(s)))
 }
 
-func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg tgbotapi.Message, err error) {
+func (m *TelegramBot) SendMsg(ctx context.Context, payload *MsgPayload) (rmsg tgbotapi.Message, err error) {
 	var msg tgbotapi.Chattable
 	var re = regexp.MustCompile(`(?m).(webm|mp4|mkv|gif|flv|avi|mov|wmv|asf)`)
 	switch payload.Type {
@@ -181,13 +179,13 @@ func (m *TelegramBot) SendMsg(payload *MsgPayload) (rmsg tgbotapi.Message, err e
 
 	rmsg, err = m.Send(msg)
 	if err != nil {
-		Logging.Errorf("err sending a message: %v", err)
-		m.SendMsg(&MsgPayload{
+		Logging.Errorf(ctx, "err sending a message: %v", err)
+		m.SendMsg(ctx, &MsgPayload{
 			SourceMsg: payload.SourceMsg,
 			Text:      notice.TranslateError(notice.ErrUnexpectedError, payload.SourceMsg.From.LanguageCode),
 		})
 	}
-	Logging.Infof("msg successfully sent to: %v", payload.SourceMsg.Chat.ID)
+	Logging.Infof(ctx, "msg successfully sent to: %v", payload.SourceMsg.Chat.ID)
 	return
 }
 
@@ -219,13 +217,19 @@ func extractUrlAndText(str string) (addr *url.URL, label string, err error) {
 	return
 }
 
-func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
-	ctx := context.Background()
-
+func (m *TelegramBot) fetcher(ctx context.Context, msg tgbotapi.Message) {
 	url, label, err := extractUrlAndText(msg.Text)
 	if err != nil {
 		return
 	}
+
+	Logging.Infow(ctx, "got message",
+		"user", msg.Chat.UserName,
+		"user_id", msg.Chat.ID,
+		"language", msg.From.LanguageCode,
+		"url", url,
+		"hostname", url.Hostname(),
+	)
 
 	if _, ok := m.vidCache[url.String()]; ok {
 		return
@@ -234,7 +238,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	m.vidCache[url.String()] = true
 
 	if strings.HasSuffix(url.Hostname(), "ru") || strings.Contains(url.Hostname(), "vk") {
-		m.SendMsg(&MsgPayload{
+		m.SendMsg(ctx, &MsgPayload{
 			SourceMsg: &msg,
 			Text:      notice.TranslateError(notice.ErrUnsupportedService, msg.From.LanguageCode),
 		})
@@ -257,19 +261,25 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 	dctx.SetUrl(url)
 	dctx.SetLang(msg.From.LanguageCode)
 
-	m.Userdb.Add(int(msg.Chat.ID), msg.Chat.UserName, msg.Text)
-
 	media, err := m.d.Download(dctx, url)
 	if err != nil {
-		Logging.Errorf("err download video %s: %v", msg.Text, err)
+		Logging.Errorf(ctx, "err download video %s: %v", msg.Text, err)
 		n.Close()
 
 		anima := tgbotapi.NewAnimation(msg.Chat.ID, tgbotapi.FileURL(RandomGif()))
 		anima.Caption = notice.TranslateError(err, msg.From.LanguageCode)
 
+		Logging.Errorw(ctx, "error",
+			"user", msg.Chat.UserName,
+			"user_id", msg.Chat.ID,
+			"language", msg.From.LanguageCode,
+			"url", url,
+			"hostname", url.Hostname(),
+		)
+
 		_, err = m.bot.Send(anima)
 		if err != nil {
-			Logging.Errorf("err sending gif %s: %v", msg.Text, err)
+			Logging.Errorf(ctx, "err sending gif %s: %v", msg.Text, err)
 		}
 		return
 	}
@@ -278,7 +288,7 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 		n.UpdTextNotify(fmt.Sprintf(notice.TranslateNotice(notice.NoticeMediaFound, msg.From.LanguageCode), len(media)))
 	}
 
-	m.SendMsg(&MsgPayload{
+	m.SendMsg(ctx, &MsgPayload{
 		Type:        TypeMedia,
 		Text:        label,
 		Media:       media,
@@ -286,44 +296,51 @@ func (m *TelegramBot) fetcher(msg tgbotapi.Message) {
 		SourceMsg:   &msg,
 	})
 
+	Logging.Infow(ctx, "sent media",
+		"user", msg.Chat.UserName,
+		"user_id", msg.Chat.ID,
+		"language", msg.From.LanguageCode,
+		"url", url,
+		"hostname", url.Hostname(),
+		"media", media,
+	)
+
 	n.UpdTextNotify(notice.TranslateNotice(notice.NoticeDone, msg.From.LanguageCode))
-	cancel()
+	//cancel()
 	time.Sleep(time.Duration(2 * time.Second))
 
 	n.Close()
 }
 
-func (m *TelegramBot) ProcessMessage(message tgbotapi.Message) {
-	go func(msg tgbotapi.Message) {
-		if msg.From.IsBot {
-			return
-		}
+func (m *TelegramBot) ProcessMessage(ctx context.Context, msg tgbotapi.Message) {
+	if msg.From.IsBot {
+		return
+	}
 
-		// if msg is command and empty
-		if msg.IsCommand() {
-			switch msg.Command() {
-			case "get":
-				text := msg.CommandArguments()
-				if text == "" {
-					sent, e := m.SendMsg(&MsgPayload{
-						Type:      TypeMedia,
-						Text:      usage(msg.Command(), msg.From.LanguageCode),
-						SourceMsg: &msg,
-					})
-					if e != nil {
-						return
-					}
-					time.Sleep(10 * time.Second)
-					m.bot.Send(tgbotapi.NewDeleteMessage(msg.Chat.ID, sent.MessageID))
+	// if msg is command and empty
+	if msg.IsCommand() {
+		switch msg.Command() {
+		case "get":
+			text := msg.CommandArguments()
+			if text == "" {
+				sent, e := m.SendMsg(ctx, &MsgPayload{
+					Type:      TypeMedia,
+					Text:      usage(msg.Command(), msg.From.LanguageCode),
+					SourceMsg: &msg,
+				})
+				if e != nil {
 					return
 				}
-				msg.Text = text
-
-				m.fetcher(msg)
+				time.Sleep(10 * time.Second)
+				m.bot.Send(tgbotapi.NewDeleteMessage(msg.Chat.ID, sent.MessageID))
+				return
 			}
-		} else {
-			m.fetcher(msg)
-		}
+			msg.Text = text
 
-	}(message)
+			m.fetcher(ctx, msg)
+		}
+	} else {
+		m.fetcher(ctx, msg)
+	}
+
 }
