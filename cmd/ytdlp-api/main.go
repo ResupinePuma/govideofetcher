@@ -26,6 +26,7 @@ import (
 	ytdlpapi "videofetcher/internal/yt-dlp-api"
 
 	ginzap "github.com/gin-contrib/zap"
+	"github.com/samber/lo"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -214,7 +215,13 @@ func main() {
 	sugar := logger.Sugar()
 	defer logger.Sync() // Flushes buffer, if any
 
-	r.Use(otelgin.Middleware(telemetry.ServiceName,
+	r.Use(ginzap.Ginzap(logger, time.RFC3339, true), errorMiddleware())
+
+	r.GET("/health", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	r.POST("/convert", otelgin.Middleware(telemetry.ServiceName,
 		otelgin.WithGinMetricAttributeFn(func(c *gin.Context) []attribute.KeyValue {
 			start := time.Now()
 			c.Next()
@@ -238,258 +245,255 @@ func main() {
 
 		// Продолжаем цепочку
 		c.Next()
-	})
+	},
+		func(c *gin.Context) {
+			ctx, cancel := context.WithCancel(c.Request.Context())
+			defer cancel()
 
-	r.Use(ginzap.Ginzap(logger, time.RFC3339, true), errorMiddleware())
+			var args ytdlpapi.BodyArgs
+			if err := c.BindJSON(&args); err != nil {
+				c.Error(err)
+				return
+			}
 
-	r.GET("/health", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
+			sugar.Infow("got message", "params", args, "trace_id", c.GetString("trace_id"))
 
-	r.POST("/convert", func(c *gin.Context) {
-		ctx, cancel := context.WithCancel(c.Request.Context())
-		defer cancel()
+			filename := randomFileName(8)
 
-		var args ytdlpapi.BodyArgs
-		if err := c.BindJSON(&args); err != nil {
-			c.Error(err)
-			return
-		}
+			if args.Format == "" || args.Extension == "" || args.URL == "" {
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+			args.Extension = strings.TrimPrefix(args.Extension, ".")
+			mformats := []string{"avi", "flv", "mkv", "mov", "mp4", "webm"}
+			cmd := exec.CommandContext(ctx, YTDlPath,
+				"--no-call-home",
+				"--no-cache-dir",
+				"--ignore-errors",
+				"--no-abort-on-error",
+				"--proxy", args.ProxyURL,
+				"--newline",
+				"-N", "8",
+				"--restrict-filenames",
+				"-f", args.Format,
+			)
+			
+			if lo.Contains(mformats, args.Extension) {
+				cmd.Args = append(cmd.Args, "--merge-output-format", args.Extension)
+			}
+			args.Extension = "." + args.Extension
 
-		sugar.Infow("got message", "params", args, "trace_id", c.GetString("trace_id"))
+			if args.BufferSize != "" {
+				cmd.Args = append(cmd.Args, "--buffer-size", args.BufferSize)
+			}
+			if args.DownloadThumb {
+				cmd.Args = append(cmd.Args, "--write-thumbnail", "--convert-thumbnails", "jpg")
+			}
+			if args.DownloadInfo {
+				cmd.Args = append(cmd.Args, "--write-info-json")
+			}
+			if args.MaxFilesize != "" {
+				s, err := parseSize(args.MaxFilesize)
+				if err != nil {
+					c.Error(err)
+					return
+				}
+				args.MaxSize = s
+				cmd.Args = append(cmd.Args, "--max-filesize", args.MaxFilesize)
+			}
+			if args.Headers != nil {
+				for k, v := range args.Headers {
+					line := fmt.Sprintf("%s: %s", k, strings.Join(v, "; "))
+					cmd.Args = append(cmd.Args, "--add-header", line)
+				}
+			}
 
-		filename := randomFileName(8)
+			if args.FFMpeg != "" {
+				cmd.Args = append(cmd.Args, "-o", filename+args.Extension)
+				cmd.Args = append(cmd.Args, "--exec", fmt.Sprintf("%s -i {} %s %s", "ffmpeg", args.FFMpeg, "conv_"+filename+args.Extension))
+				cmd.Args = append(cmd.Args, args.URL)
+			} else {
+				cmd.Args = append(cmd.Args, args.URL)
+				cmd.Args = append(cmd.Args, "-o", filename+args.Extension)
+			}
 
-		if args.Format == "" || args.Extension == "" || args.URL == "" {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
-		args.Extension = strings.TrimPrefix(args.Extension, ".")
-		args.Extension = "." + args.Extension
-
-		cmd := exec.CommandContext(ctx, YTDlPath,
-			"--no-call-home",
-			"--no-cache-dir",
-			"--ignore-errors",
-			"--no-abort-on-error",
-			"--proxy", args.ProxyURL,
-			"--newline",
-			"-N", "8",
-			"--restrict-filenames",
-			"--merge-output-format", strings.TrimPrefix(args.Extension, "."),
-			"-f", args.Format,
-		)
-		if args.BufferSize != "" {
-			cmd.Args = append(cmd.Args, "--buffer-size", args.BufferSize)
-		}
-		if args.DownloadThumb {
-			cmd.Args = append(cmd.Args, "--write-thumbnail", "--convert-thumbnails", "jpg")
-		}
-		if args.DownloadInfo {
-			cmd.Args = append(cmd.Args, "--write-info-json")
-		}
-		if args.MaxFilesize != "" {
-			s, err := parseSize(args.MaxFilesize)
+			tempDir, err := os.MkdirTemp("", "ydls")
 			if err != nil {
 				c.Error(err)
 				return
 			}
-			args.MaxSize = s
-			cmd.Args = append(cmd.Args, "--max-filesize", args.MaxFilesize)
-		}
-		if args.Headers != nil {
-			for k, v := range args.Headers {
-				line := fmt.Sprintf("%s: %s", k, strings.Join(v, "; "))
-				cmd.Args = append(cmd.Args, "--add-header", line)
+			defer os.RemoveAll(tempDir)
+
+			cmd.Dir = tempDir
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				c.Error(err)
+				return
 			}
-		}
 
-		if args.FFMpeg != "" {
-			cmd.Args = append(cmd.Args, "-o", filename+args.Extension)
-			cmd.Args = append(cmd.Args, "--exec", fmt.Sprintf("%s -i {} %s %s", "ffmpeg", args.FFMpeg, "conv_"+filename+args.Extension))
-			cmd.Args = append(cmd.Args, args.URL)
-		} else {
-			cmd.Args = append(cmd.Args, args.URL)
-			cmd.Args = append(cmd.Args, "-o", filename+args.Extension)
-		}
+			stderr, err := cmd.StderrPipe()
+			if err != nil {
+				c.Error(err)
+				return
+			}
 
-		tempDir, err := os.MkdirTemp("", "ydls")
-		if err != nil {
-			c.Error(err)
-			return
-		}
-		defer os.RemoveAll(tempDir)
+			go streamLogs(stdout, c.GetString("trace_id"), logger)
+			go streamLogs(stderr, c.GetString("trace_id"), logger)
 
-		cmd.Dir = tempDir
-		stdout, err := cmd.StdoutPipe()
-		if err != nil {
-			c.Error(err)
-			return
-		}
+			if err := cmd.Start(); err != nil {
+				sugar.Errorw("got error", "error", err, "trace_id", c.GetString("trace_id"))
+				c.Error(err)
+				return
+			}
 
-		stderr, err := cmd.StderrPipe()
-		if err != nil {
-			c.Error(err)
-			return
-		}
+			var multipartWriter *multipart.Writer
+			var setupMultipart = func() {
+				multipartWriter = multipart.NewWriter(c.Writer)
+				c.Header("Content-Type", multipartWriter.FormDataContentType())
+			}
 
-		go streamLogs(stdout, c.GetString("trace_id"), logger)
-		go streamLogs(stderr, c.GetString("trace_id"), logger)
+			errorCh := make(chan error, 1)
+			filesChan := make(chan fileResult)
+			var wg sync.WaitGroup
 
-		if err := cmd.Start(); err != nil {
-			sugar.Errorw("got error", "error", err, "trace_id", c.GetString("trace_id"))
-			c.Error(err)
-			return
-		}
+			if args.DownloadInfo {
+				wg.Add(1)
+				go func(msize int64) {
+					var info Info
+					defer wg.Done()
+					if res := waitForFile(ctx, tempDir, "*.info.json"); res != nil {
+						res.typeKey = "info"
+						b, err := io.ReadAll(res.file)
+						if err != nil {
+							errorCh <- fmt.Errorf("err read info: %v", err)
+							return
+						}
 
-		var multipartWriter *multipart.Writer
-		var setupMultipart = func() {
-			multipartWriter = multipart.NewWriter(c.Writer)
-			c.Header("Content-Type", multipartWriter.FormDataContentType())
-		}
+						err = json.Unmarshal(b, &info)
+						if err != nil {
+							errorCh <- fmt.Errorf("err decode info: %v", err)
+							return
+						}
+						res.file.Close()
 
-		errorCh := make(chan error, 1)
-		filesChan := make(chan fileResult)
-		var wg sync.WaitGroup
+						size := max(info.Filesize, info.FilesizeApprox)
+						if msize > 0 && size > float64(msize) {
+							errorCh <- fmt.Errorf("size limit reached")
+							return
+						}
 
-		if args.DownloadInfo {
-			wg.Add(1)
-			go func(msize int64) {
-				var info Info
-				defer wg.Done()
-				if res := waitForFile(ctx, tempDir, "*.info.json"); res != nil {
-					res.typeKey = "info"
-					b, err := io.ReadAll(res.file)
-					if err != nil {
-						errorCh <- fmt.Errorf("err read info: %v", err)
-						return
+						res.file = io.NopCloser(bytes.NewReader(b))
+
+						filesChan <- *res
 					}
+				}(args.MaxSize)
+			}
 
-					err = json.Unmarshal(b, &info)
-					if err != nil {
-						errorCh <- fmt.Errorf("err decode info: %v", err)
-						return
+			if args.DownloadThumb {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					if res := waitForFile(ctx, tempDir, "*.jpg"); res != nil {
+						res.typeKey = "thumb"
+
+						b, err := io.ReadAll(io.LimitReader(res.file, 10*1024*1024*1024))
+						if err != nil {
+							errorCh <- err
+							return
+						}
+						res.file.Close()
+
+						pngb, err := ToPng(b)
+						if err != nil {
+							errorCh <- err
+							return
+						}
+
+						r := io.NopCloser(bytes.NewReader(pngb))
+						fname := strings.TrimSuffix(res.filename, ".jpg")
+						filesChan <- fileResult{filename: fname + ".png", file: r}
 					}
-					res.file.Close()
+				}()
+			}
 
-					size := max(info.Filesize, info.FilesizeApprox)
-					if msize > 0 && size > float64(msize) {
-						errorCh <- fmt.Errorf("size limit reached")
-						return
-					}
-
-					res.file = io.NopCloser(bytes.NewReader(b))
-
-					filesChan <- *res
-				}
-			}(args.MaxSize)
-		}
-
-		if args.DownloadThumb {
-			wg.Add(1)
 			go func() {
-				defer wg.Done()
-				if res := waitForFile(ctx, tempDir, "*.jpg"); res != nil {
-					res.typeKey = "thumb"
-
-					b, err := io.ReadAll(io.LimitReader(res.file, 10*1024*1024*1024))
-					if err != nil {
-						errorCh <- err
-						return
-					}
-					res.file.Close()
-
-					pngb, err := ToPng(b)
-					if err != nil {
-						errorCh <- err
-						return
-					}
-
-					r := io.NopCloser(bytes.NewReader(pngb))
-					fname := strings.TrimSuffix(res.filename, ".jpg")
-					filesChan <- fileResult{filename: fname + ".png", file: r}
+				wg.Wait()
+				close(filesChan)
+				if multipartWriter != nil {
+					multipartWriter.Close()
 				}
 			}()
-		}
 
-		go func() {
-			wg.Wait()
-			close(filesChan)
-			if multipartWriter != nil {
-				multipartWriter.Close()
-			}
-		}()
+			// stream each found file
+			go func() {
+				for fil := range filesChan {
+					if multipartWriter == nil {
+						setupMultipart()
+					}
 
-		// stream each found file
-		go func() {
-			for fil := range filesChan {
-				if multipartWriter == nil {
-					setupMultipart()
+					if fil.file == nil {
+						continue
+					}
+
+					writer, err := multipartWriter.CreateFormFile(fil.typeKey, fil.filename)
+					if err != nil {
+						errorCh <- err
+						fil.file.Close()
+						return
+					}
+					_, err = io.Copy(writer, fil.file)
+					if err != nil {
+						errorCh <- err
+						fil.file.Close()
+						return
+					}
 				}
+			}()
 
-				if fil.file == nil {
-					continue
-				}
+			wg.Add(1)
+			defer wg.Done()
 
-				writer, err := multipartWriter.CreateFormFile(fil.typeKey, fil.filename)
-				if err != nil {
-					errorCh <- err
-					fil.file.Close()
-					return
-				}
-				_, err = io.Copy(writer, fil.file)
-				if err != nil {
-					errorCh <- err
-					fil.file.Close()
-					return
-				}
-			}
-		}()
-
-		wg.Add(1)
-		defer wg.Done()
-
-		if err := cmd.Wait(); err != nil {
-			sugar.Errorw("got error", "error", err, "trace_id", c.GetString("trace_id"))
-			return
-		}
-
-		if !cmd.ProcessState.Success() {
-			return
-		}
-
-		var vf io.ReadCloser
-		fname := ""
-		if args.FFMpeg != "" {
-			f, err := os.Open(filepath.Join(tempDir, "conv_"+filename+args.Extension))
-			if err != nil && errors.Is(err, fs.ErrNotExist) {
+			if err := cmd.Wait(); err != nil {
+				sugar.Errorw("got error", "error", err, "trace_id", c.GetString("trace_id"))
 				return
 			}
-			fname = "conv_" + filename + args.Extension
-			vf = f
-		} else {
-			f, err := os.Open(filepath.Join(tempDir, filename+args.Extension))
-			if err != nil && errors.Is(err, fs.ErrNotExist) {
+
+			if !cmd.ProcessState.Success() {
 				return
 			}
-			fname = filename + args.Extension
-			vf = f
-		}
 
-		if multipartWriter == nil {
-			setupMultipart()
-		}
+			var vf io.ReadCloser
+			fname := ""
+			if args.FFMpeg != "" {
+				f, err := os.Open(filepath.Join(tempDir, "conv_"+filename+args.Extension))
+				if err != nil && errors.Is(err, fs.ErrNotExist) {
+					return
+				}
+				fname = "conv_" + filename + args.Extension
+				vf = f
+			} else {
+				f, err := os.Open(filepath.Join(tempDir, filename+args.Extension))
+				if err != nil && errors.Is(err, fs.ErrNotExist) {
+					return
+				}
+				fname = filename + args.Extension
+				vf = f
+			}
 
-		writer, err := multipartWriter.CreateFormFile("media", fname)
-		if err != nil {
-			c.Error(err)
+			if multipartWriter == nil {
+				setupMultipart()
+			}
+
+			writer, err := multipartWriter.CreateFormFile("media", fname)
+			if err != nil {
+				c.Error(err)
+				vf.Close()
+				return
+			}
+			io.Copy(writer, vf)
 			vf.Close()
-			return
-		}
-		io.Copy(writer, vf)
-		vf.Close()
 
-	})
+		})
 
 	port := os.Getenv("PORT")
 	if port == "" {

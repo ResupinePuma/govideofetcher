@@ -10,4 +10,6 @@ services:
   api:
     image: 192.168.1.2:5000/ytdlapi
     container_name: ytdlpapi
+    ports:
+      - 9123:8080
     restart: always

@@ -224,7 +224,8 @@ func (m *TelegramBot) fetcher(ctx context.Context, msg tgbotapi.Message) {
 	}
 
 	Logging.Infow(ctx, "got message",
-		"user", msg.Chat.UserName,
+		"nickname", msg.Chat.UserName,
+		"username", strings.TrimSpace(fmt.Sprintf("%s %s", msg.Chat.FirstName, msg.Chat.LastName)),
 		"user_id", msg.Chat.ID,
 		"language", msg.From.LanguageCode,
 		"url", url,
@@ -270,7 +271,8 @@ func (m *TelegramBot) fetcher(ctx context.Context, msg tgbotapi.Message) {
 		anima.Caption = notice.TranslateError(err, msg.From.LanguageCode)
 
 		Logging.Errorw(ctx, "error",
-			"user", msg.Chat.UserName,
+			"nickname", msg.Chat.UserName,
+			"username", strings.TrimSpace(fmt.Sprintf("%s %s", msg.Chat.FirstName, msg.Chat.LastName)),
 			"user_id", msg.Chat.ID,
 			"language", msg.From.LanguageCode,
 			"url", url,
@@ -297,7 +299,8 @@ func (m *TelegramBot) fetcher(ctx context.Context, msg tgbotapi.Message) {
 	})
 
 	Logging.Infow(ctx, "sent media",
-		"user", msg.Chat.UserName,
+		"nickname", msg.Chat.UserName,
+		"username", strings.TrimSpace(fmt.Sprintf("%s %s", msg.Chat.FirstName, msg.Chat.LastName)),
 		"user_id", msg.Chat.ID,
 		"language", msg.From.LanguageCode,
 		"url", url,
