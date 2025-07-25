@@ -45,7 +45,8 @@ var YTDlPath = "yt-dlp"
 var ErrNotFound = fmt.Errorf("file not found")
 
 type Info struct {
-	Filesize       float64 `json:"filesize"`        // The number of bytes, if known in advance
+	Filesize       float64 `json:"filesize"` // The number of bytes, if known in advance
+	Duration       int64   `json:"duration"`
 	FilesizeApprox float64 `json:"filesize_approx"` // An estimate for the number of bytes
 }
 
@@ -188,6 +189,7 @@ func main() {
 
 	serviceName := flag.String("serviceName", "", "name of service for telemetry")
 	address := flag.String("otelAddress", "", "address of telemetry server")
+	ffmpeglimit := flag.Int64("ffDurationLim", 60, "limit of video deuration to be converted via ffmpeg (seconds)")
 	flag.Parse()
 
 	telemetry.ServiceName = *serviceName
@@ -255,6 +257,9 @@ func main() {
 				c.Error(err)
 				return
 			}
+			if args.FFMpegDurationLimit == nil {
+				args.FFMpegDurationLimit = ffmpeglimit
+			}
 
 			sugar.Infow("got message", "params", args, "trace_id", c.GetString("trace_id"))
 
@@ -277,7 +282,7 @@ func main() {
 				"--restrict-filenames",
 				"-f", args.Format,
 			)
-			
+
 			if lo.Contains(mformats, args.Extension) {
 				cmd.Args = append(cmd.Args, "--merge-output-format", args.Extension)
 			}
@@ -308,14 +313,8 @@ func main() {
 				}
 			}
 
-			if args.FFMpeg != "" {
-				cmd.Args = append(cmd.Args, "-o", filename+args.Extension)
-				cmd.Args = append(cmd.Args, "--exec", fmt.Sprintf("%s -i {} %s %s", "ffmpeg", args.FFMpeg, "conv_"+filename+args.Extension))
-				cmd.Args = append(cmd.Args, args.URL)
-			} else {
-				cmd.Args = append(cmd.Args, args.URL)
-				cmd.Args = append(cmd.Args, "-o", filename+args.Extension)
-			}
+			cmd.Args = append(cmd.Args, args.URL)
+			cmd.Args = append(cmd.Args, "-o", filename+args.Extension)
 
 			tempDir, err := os.MkdirTemp("", "ydls")
 			if err != nil {
@@ -356,10 +355,10 @@ func main() {
 			filesChan := make(chan fileResult)
 			var wg sync.WaitGroup
 
+			var info Info
 			if args.DownloadInfo {
 				wg.Add(1)
 				go func(msize int64) {
-					var info Info
 					defer wg.Done()
 					if res := waitForFile(ctx, tempDir, "*.info.json"); res != nil {
 						res.typeKey = "info"
@@ -411,17 +410,23 @@ func main() {
 
 						r := io.NopCloser(bytes.NewReader(pngb))
 						fname := strings.TrimSuffix(res.filename, ".jpg")
-						filesChan <- fileResult{filename: fname + ".png", file: r}
+						filesChan <- fileResult{typeKey: res.typeKey, filename: fname + ".png", file: r}
 					}
 				}()
 			}
 
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := cmd.Wait(); err != nil {
+					errorCh <- err
+					return
+				}
+			}()
+
 			go func() {
 				wg.Wait()
 				close(filesChan)
-				if multipartWriter != nil {
-					multipartWriter.Close()
-				}
 			}()
 
 			// stream each found file
@@ -448,13 +453,29 @@ func main() {
 						return
 					}
 				}
+				close(errorCh)
 			}()
 
-			wg.Add(1)
-			defer wg.Done()
-
-			if err := cmd.Wait(); err != nil {
-				sugar.Errorw("got error", "error", err, "trace_id", c.GetString("trace_id"))
+			for err := range errorCh {
+				if err == nil {
+					continue
+				}
+				sugar.Errorw("got error from yt-dlp", "error", err, "trace_id", c.GetString("trace_id"))
+				if multipartWriter != nil {
+					f, e := multipartWriter.CreateFormField("error")
+					if e != nil {
+						return
+					}
+					_, e = f.Write([]byte(err.Error()))
+					if e != nil {
+						sugar.Error(e)
+						return
+					}
+					multipartWriter.Close()
+				} else {
+					c.Status(http.StatusGone)
+					c.Writer.WriteString(err.Error())
+				}
 				return
 			}
 
@@ -464,9 +485,49 @@ func main() {
 
 			var vf io.ReadCloser
 			fname := ""
-			if args.FFMpeg != "" {
+			if args.FFMpeg != "" && lo.Contains(mformats, strings.TrimPrefix(args.Extension, ".")) && info.Duration <= *args.FFMpegDurationLimit {
+				ffargs := []string{"-i", filename + args.Extension}
+				clean := lo.Filter(strings.Split(args.FFMpeg, " "), func(s string, _ int) bool {
+					return strings.TrimSpace(s) != ""
+				})
+				ffargs = append(ffargs, clean...)
+				ffargs = append(ffargs, "conv_"+filename+args.Extension)
+
+				cmd = exec.CommandContext(ctx,
+					"ffmpeg",
+					ffargs...,
+				)
+				cmd.Dir = tempDir
+				stdout, err := cmd.StdoutPipe()
+				if err != nil {
+					c.Error(err)
+					return
+				}
+
+				stderr, err := cmd.StderrPipe()
+				if err != nil {
+					c.Error(err)
+					return
+				}
+				go streamLogs(stdout, c.GetString("trace_id"), logger)
+				go streamLogs(stderr, c.GetString("trace_id"), logger)
+
+				err = cmd.Start()
+				if err != nil {
+					sugar.Errorw("got error from ffmpeg", "error", err, "trace_id", c.GetString("trace_id"))
+					c.Error(err)
+					return
+				}
+
+				if err := cmd.Wait(); err != nil {
+					sugar.Errorw("got error from ffmpeg", "error", err, "trace_id", c.GetString("trace_id"))
+					c.Error(err)
+					return
+				}
+
 				f, err := os.Open(filepath.Join(tempDir, "conv_"+filename+args.Extension))
 				if err != nil && errors.Is(err, fs.ErrNotExist) {
+					c.Error(err)
 					return
 				}
 				fname = "conv_" + filename + args.Extension
@@ -474,6 +535,7 @@ func main() {
 			} else {
 				f, err := os.Open(filepath.Join(tempDir, filename+args.Extension))
 				if err != nil && errors.Is(err, fs.ErrNotExist) {
+					c.Error(err)
 					return
 				}
 				fname = filename + args.Extension
@@ -493,6 +555,9 @@ func main() {
 			io.Copy(writer, vf)
 			vf.Close()
 
+			if multipartWriter != nil {
+				multipartWriter.Close()
+			}
 		})
 
 	port := os.Getenv("PORT")

@@ -71,6 +71,10 @@ func NewConfig() (cfg *Config, err error) {
 	if err != nil {
 		return
 	}
+	if cfg.YTDL.Timeout == 0 {
+		cfg.YTDL.Timeout = int64(float64(cfg.Timeout) * 0.9)
+	}
+
 	// tc, err := base64.StdEncoding.DecodeString(cfg.TT.SplashRequest)
 	// if err != nil {
 	// 	return

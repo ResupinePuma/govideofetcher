@@ -16,6 +16,7 @@ type YTDLOptions struct {
 	Executable string `yaml:"executable"`
 	FFmpeg     string `yaml:"ffmpeg"`
 	APIAddr    string `yaml:"api_addr"`
+	Timeout    int64  `yaml:"timeout"`
 	Proxies    string
 	Headers    http.Header
 

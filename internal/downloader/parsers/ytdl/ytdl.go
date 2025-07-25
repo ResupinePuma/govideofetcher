@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 	"videofetcher/internal/counting_reader"
 	cr "videofetcher/internal/counting_reader"
 	"videofetcher/internal/downloader/dcontext"
@@ -36,7 +37,7 @@ const (
 
 type YtDl struct {
 	SizeLimit int64
-	Timeout   int
+	Timeout   time.Duration
 
 	Format     string
 	FFmpeg     string
@@ -47,6 +48,7 @@ type YtDl struct {
 
 	YTDLPApi string
 	mode     int
+	client   http.Client
 }
 
 func NewParser(sizelim int64, opts options.YTDLOptions) *YtDl {
@@ -66,9 +68,15 @@ func NewParser(sizelim int64, opts options.YTDLOptions) *YtDl {
 		//yt.Headers = opts.Headers
 		yt.FFmpeg = opts.FFmpeg
 		yt.ProxyURL = opts.Proxies
+		yt.Timeout = time.Duration(opts.Timeout) * time.Second
 	} else {
+		yt.Timeout = http.DefaultClient.Timeout
 		yt.Executable = "yt-dlp"
 		yt.Format = "18/17,bestvideo[height<=720][ext=mp4]+worstaudio,(mp4)[ext=mp4][vcodec^=h26],worst[width>=480][ext=mp4],worst[ext=mp4]"
+	}
+
+	yt.client = http.Client{
+		Timeout: yt.Timeout,
 	}
 	return &yt
 }
@@ -108,7 +116,7 @@ func extByMode(mode int) string {
 }
 
 // postConvert сериализует args в JSON и шлёт POST-запрос
-func postConvert(ctx context.Context, url string, args ytdlpapi.BodyArgs) (*http.Response, error) {
+func (yt *YtDl) postConvert(ctx context.Context, url string, args ytdlpapi.BodyArgs) (*http.Response, error) {
 	tracer := otel.Tracer(telemetry.ServiceName)
 	ctx, span := tracer.Start(ctx, "yt-dlp request")
 	defer span.End()
@@ -123,7 +131,7 @@ func postConvert(ctx context.Context, url string, args ytdlpapi.BodyArgs) (*http
 	}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 
-	return http.DefaultClient.Do(req)
+	return yt.client.Do(req)
 }
 
 // newMultipartReader создаёт multipart.Reader из ответа
@@ -151,6 +159,9 @@ func parseParts(mr *multipart.Reader) (info Info, thumb io.Reader, mediaPart io.
 			break
 		}
 		if errPart != nil {
+			if errPart.Error() == "multipart: NextPart: unexpected EOF" {
+				continue
+			}
 			return info, nil, nil, fmt.Errorf("reading multipart: %w", errPart)
 		}
 
@@ -169,7 +180,13 @@ func parseParts(mr *multipart.Reader) (info Info, thumb io.Reader, mediaPart io.
 				continue
 			}
 			thumb = bytes.NewReader(buf)
-
+		case "error":
+			b, err := io.ReadAll(part)
+			if err != nil {
+				part.Close()
+				continue
+			}
+			return info, thumb, part, errors.New(string(b))
 		case "media":
 			return info, thumb, part, nil
 		default:
@@ -249,12 +266,19 @@ func (yt *YtDl) Download(ctx *dcontext.Context) error {
 	ctx.Notifier().UpdTextNotify(notice.TranslateNotice(notice.NoticeDownloadingMedia, ctx.GetLang()))
 	go ctx.Notifier().StartTicker(ctx)
 
-	resp, err := postConvert(ctx.Context, yt.YTDLPApi, args)
+	resp, err := yt.postConvert(ctx.Context, yt.YTDLPApi, args)
 	if err != nil {
 		return errors.Join(notice.ErrInvalidResponse, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusGone {
+			b, _ := io.ReadAll(resp.Body)
+			if strings.Contains(string(b), notice.ErrSizeLimitReached.Error()) {
+				return notice.ErrSizeLimitReached
+			}
+		}
+
 		return notice.ErrInvalidResponse
 	}
 
@@ -265,6 +289,12 @@ func (yt *YtDl) Download(ctx *dcontext.Context) error {
 
 	info, thumb, mediaPart, err := parseParts(mr)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return errors.Join(notice.ErrTimeout, err)
+		}
+		if strings.Contains(err.Error(), notice.ErrSizeLimitReached.Error()) {
+			return notice.ErrSizeLimitReached
+		}
 		return err
 	}
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 	"videofetcher/internal/downloader/dcontext"
 )
 
@@ -57,7 +58,7 @@ func TestYTdl_Download(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			yt := &YtDl{
 				SizeLimit: 50 * 1024 * 1024,
-				Timeout:   tt.fields.Timeout,
+				Timeout:   time.Duration(tt.fields.Timeout),
 				Format:    "18/17/bestvideo+worstaudio/(mp4)[ext=mp4][vcodec^=h26]/worst[width>=480][ext=mp4]/worst[ext=mp4]",
 				mode:      modeVideo,
 				ProxyURL:  "http://172.30.1.2:3128",
